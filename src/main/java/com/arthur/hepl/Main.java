@@ -1,10 +1,5 @@
 package com.arthur.hepl;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.stream.Collectors;
-
 public class Main
 {
     public static void main(String[] args)
@@ -18,7 +13,7 @@ public class Main
         algorithm.setSolution("0101010101010101010101010101010101010101010101010101010101010101");
         TournamentSelection selection = new TournamentSelection(5, algorithm);
         RouletteSelection selection1 = new RouletteSelection(algorithm);
-        algorithm.setSelectionMethod(selection1);
+        algorithm.setSelectionMethod(selection);
 
         algorithm.run();
     }

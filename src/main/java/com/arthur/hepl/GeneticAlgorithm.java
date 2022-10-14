@@ -1,7 +1,6 @@
 package com.arthur.hepl;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -37,8 +36,6 @@ public class GeneticAlgorithm implements Runnable
             for (i = 0; i < getMaxIterations() && population.getFittestValue(getSolution()) < getGeneSize(); i++)
             {
                 population = evolve(population);
-                /*for(int ind  = 0; ind < population.getIndividuals().size(); ind++)
-                    DataStorage.store(i + 1, ind + 1, population.getIndividuals().get(ind).getFitness(solution));*/
                 System.out.println("Generation: " + i + " Correct genes found: " + population.getFittestValue(getSolution()));
             }
             System.out.println("Solution found!");
@@ -129,7 +126,7 @@ public class GeneticAlgorithm implements Runnable
     public void setSolution(String solution)
     {
         this.solution = solution.getBytes(StandardCharsets.UTF_8);
-        for(int i = 0; i < this.solution.length; i++)
+        for (int i = 0; i < this.solution.length; i++)
         {
             this.solution[i] -= 48;
         }
