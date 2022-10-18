@@ -46,19 +46,25 @@ public class Environment implements Runnable
         int height = grid.length;
         int width = grid[0].length;
         int startPosition = (int) ((width / 4) * Math.random());
-        int endPosition = (int) (width - (width / 4) * Math.random());
+        int endPosition = (int) ((width-1) - (width / 4) * Math.random());
         if(Math.random() <= 0.5)
         {
             int temp = startPosition;
             startPosition = endPosition;
             endPosition = temp;
         }
-        int precHeight = (int) (Math.random() * (height-1));
+        int precHeight = (int) (height / 2 + Math.random() * (height / 4.0));
         for(int x = 0; x < width; x++)
         {
-            int localHeight = precHeight + (Math.random() >= 0.5 ? 1 : -1);
-            if(localHeight < 0 || localHeight >= height)
-                localHeight = precHeight;
+            int localHeight = precHeight;
+            if(Math.random() < 0.8)
+            {
+               localHeight += (Math.random() >= 0.5 ? 1 : -1);
+               if(localHeight < 0)
+                   localHeight = 0;
+               else if(localHeight >= height)
+                   localHeight = height - 1;
+            }
             for(int y = height - 1; y > height - localHeight; y--)
             {
                 grid[y][x] = Cases.WALL;
@@ -166,7 +172,7 @@ public class Environment implements Runnable
         Vector2i position = new Vector2i(creaturePos).sub(0, -1);
         if (!outOfBand(position))
         {
-            return grid[position.y][position.x] == Cases.AIR;
+            return grid[position.y][position.x] == Cases.AIR || grid[position.y][position.x] == Cases.START;
         }
         return false;
     }
