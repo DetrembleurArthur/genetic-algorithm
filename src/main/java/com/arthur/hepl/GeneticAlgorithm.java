@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 
 public class GeneticAlgorithm implements Runnable
 {
-    private double uniformRate = 0.5;
+    private double crossoverRate = 0.5;
     private double mutationRate = 0.025;
     private int keepCount = 0;
     private byte[] solution;
@@ -16,7 +16,7 @@ public class GeneticAlgorithm implements Runnable
 
     public GeneticAlgorithm(double uniformRate, double mutationRate, int keepCount)
     {
-        this.uniformRate = uniformRate;
+        this.crossoverRate = uniformRate;
         this.mutationRate = mutationRate;
         this.keepCount = keepCount;
     }
@@ -74,7 +74,7 @@ public class GeneticAlgorithm implements Runnable
         Individual individual = new Individual(geneSize);
         for (int i = 0; i < geneSize; i++)
         {
-            individual.setGene(i, Math.random() <= uniformRate ? individual1.getGene(i) : individual2.getGene(i));
+            individual.setGene(i, Math.random() <= crossoverRate ? individual1.getGene(i) : individual2.getGene(i));
         }
         return individual;
     }
@@ -88,14 +88,14 @@ public class GeneticAlgorithm implements Runnable
         }
     }
 
-    public double getUniformRate()
+    public double getCrossoverRate()
     {
-        return uniformRate;
+        return crossoverRate;
     }
 
-    public void setUniformRate(double uniformRate)
+    public void setCrossoverRate(double crossoverRate)
     {
-        this.uniformRate = uniformRate;
+        this.crossoverRate = crossoverRate;
     }
 
     public double getMutationRate()

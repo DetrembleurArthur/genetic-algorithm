@@ -5,7 +5,7 @@ public class Main
     public static void main(String[] args)
     {
         GeneticAlgorithm algorithm = new GeneticAlgorithm();
-        algorithm.setUniformRate(0.5);
+        algorithm.setCrossoverRate(0.5);
         algorithm.setMutationRate(0.025);
         algorithm.setKeepCount(1);
         algorithm.setMaxIterations(2000);
