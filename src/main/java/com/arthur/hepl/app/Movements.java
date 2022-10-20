@@ -1,6 +1,5 @@
 package com.arthur.hepl.app;
 
-import org.joml.Vector2f;
 import org.joml.Vector2i;
 
 public enum Movements

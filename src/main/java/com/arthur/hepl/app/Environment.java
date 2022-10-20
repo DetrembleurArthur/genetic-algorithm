@@ -245,7 +245,12 @@ public class Environment implements Runnable
                 scanner.nextLine();
             } else
             {
-                Thread.sleep(tickMs);
+                try {
+                    Thread.sleep(tickMs);
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
             }
         }
     }
