@@ -36,13 +36,15 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     {
         Population<T> population = new Population<>();
         population.randomize(populationSize, genomeSize, randomizer);
+        R fittest = null;
         int iteration = 0;
-        while(iteration < maxIterations && getFittestValue(population).compareTo(solutionFitness) != 0)
+        while(iteration < maxIterations && (fittest = getFittestValue(population)).compareTo(solutionFitness) != 0)
         {
             population = evolve(population);
             iteration++;
         }
         System.out.println("Iterations: " + iteration);
+        System.out.println("Fittest: " + fittest);
         finalGenome = getFittest(population);
     }
     

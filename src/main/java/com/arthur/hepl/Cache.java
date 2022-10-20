@@ -1,5 +1,6 @@
 package com.arthur.hepl;
 
+@Deprecated
 public class Cache<T>
 {
     private T value;
