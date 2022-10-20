@@ -1,5 +1,4 @@
 import com.arthur.hepl.app.Environment;
-import com.baeldung.algorithms.ga.binary.SimpleGeneticAlgorithm;
 
 public class Main
 {
