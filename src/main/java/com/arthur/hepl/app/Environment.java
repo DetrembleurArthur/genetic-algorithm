@@ -261,11 +261,4 @@ public class Environment implements Runnable
         creature.createMovementsFromString(moves);
         return new Environment(width, height, filename, maxTickCount, creature);
     }
-
-    public static void main(String[] args)
-    {
-        Environment env = buildFromArgs(args);
-        env.setTickMs(500);
-        env.run();
-    }
 }
