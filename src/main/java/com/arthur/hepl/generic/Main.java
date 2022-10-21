@@ -4,46 +4,48 @@ import java.util.Random;
 
 public class Main
 {
-    //but: avoir une somme de chiffre vallant 1000
+    //but: avoir une somme de chiffres vallant 1000
     public static void main(String[] args)
     {
         Random random = new Random();
 
-        GeneticAlgorithm<Integer, Integer, Integer> algorithm = new GeneticAlgorithm<>();
+        GeneticAlgorithm<Character, Integer, String> algorithm = new GeneticAlgorithm<>();
 
-        GeneRandomizer<Integer> randomizer = () -> random.nextInt(10000);
+        GeneRandomizer<Character> randomizer = () -> random.nextBoolean() ? '0' : '1';
 
-        TournamentSelection<Integer> tournamentSelection = new TournamentSelection<>(5, algorithm);
+        TournamentSelection<Character> tournamentSelection = new TournamentSelection<>(5, algorithm);
 
-        FitnessCalculator<Integer, Integer> fitnessCalculator = (genome, solution) -> {
-            int sum = genome.getGenes().stream()
-                .mapToInt((g) -> (Integer)g)
-                .sum();
-            int solutionFitness = algorithm.getSolutionFitness();
-            return solutionFitness - Math.abs(solutionFitness - sum);
+        FitnessCalculator<Integer, String> fitnessCalculator = (genome, solution) -> {
+            int sum = 0;
+            for(int i = 0; i < solution.length(); i++)
+            {
+                if(solution.charAt(i) == (char)genome.getGenes().get(i))
+                    sum++;
+            }
+            return sum;
         };
+
+        String solution = "0101010101010101010101010101010101010101010101010101010101010101";
 
         algorithm.setBestKeepNumber(5);
         algorithm.setCrossoverRate(0.5);
         algorithm.setMutationRate(0.05);
-        algorithm.setGenomeSize(5);
+        algorithm.setGenomeSize(solution.length());
         algorithm.setMaxIterations(10000);
         algorithm.setPopulationSize(25);
-        algorithm.setSolution(1000);
-        algorithm.setSolutionFitness(1000);
+        algorithm.setSolution(solution);
+        algorithm.setSolutionFitness(solution.length());
         algorithm.setFitnessCalculator(fitnessCalculator);
         algorithm.setRandomizer(randomizer);
         algorithm.setSelection(tournamentSelection);
 
         algorithm.run();
 
-        Genome<Integer> genome = algorithm.getFinalGenome();
-        int sum = 0;
-        for(Integer number : genome.getGenes())
+        Genome<Character> genome = algorithm.getFinalGenome();
+        for(Character c : genome.getGenes())
         {
-            System.out.println(number);
-            sum += number;
+            System.out.print(c);
         }
-        System.out.println("sum: " + sum);
+        System.out.println();
     }
 }

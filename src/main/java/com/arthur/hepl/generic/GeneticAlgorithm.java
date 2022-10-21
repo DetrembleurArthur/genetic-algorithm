@@ -24,6 +24,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     private Selection<T> selection;
     private double crossoverRate;
     private double mutationRate;
+    private StopGeneticCriteria<R> stopGeneticCriteria = new StopGeneticCriteria.StrictStopGeneticCriteria<>();
     private final Comparator<Genome<T>> fitnessComparator = (g1, g2) -> {
         R fitness1 = fitnessCalculator.calculateFitness(g1, solution);
         R fitness2 = fitnessCalculator.calculateFitness(g2, solution);
@@ -38,7 +39,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         population.randomize(populationSize, genomeSize, randomizer);
         R fittest = null;
         int iteration = 0;
-        while(iteration < maxIterations && (fittest = getFittestValue(population)).compareTo(solutionFitness) != 0)
+        while(iteration < maxIterations && !stopGeneticCriteria.mustBeStopped(fittest = getFittestValue(population), solutionFitness))
         {
             population = evolve(population);
             iteration++;
@@ -108,9 +109,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         Optional<Genome<T>> optional = population.getGenomes()
             .stream()
             .max(fitnessComparator);
-        if(optional.isPresent())
-            return fitnessCalculator.calculateFitness(optional.get(), solution);
-        return null;
+        return optional.map(genome -> fitnessCalculator.calculateFitness(genome, solution)).orElse(null);
     }
 
     public int getPopulationSize() {
@@ -207,5 +206,15 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
 
     public Genome<T> getFinalGenome() {
         return finalGenome;
+    }
+
+    public StopGeneticCriteria<R> getStopGeneticCriteria()
+    {
+        return stopGeneticCriteria;
+    }
+
+    public void setStopGeneticCriteria(StopGeneticCriteria<R> stopGeneticCriteria)
+    {
+        this.stopGeneticCriteria = stopGeneticCriteria;
     }
 }
