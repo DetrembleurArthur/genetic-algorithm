@@ -4,7 +4,7 @@ import java.util.Random;
 
 public class Main
 {
-    //but: avoir une somme de chiffre vallant 100
+    //but: avoir une somme de chiffre vallant 1000
     public static void main(String[] args)
     {
         Random random = new Random();
