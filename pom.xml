@@ -34,5 +34,31 @@
 
 
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <configuration>
+                    <mainClass>Main</mainClass>
+                    <!--arguments>
+                        <argument>50</argument>
+                        <argument>30</argument>
+                        <argument>random</argument>
+                        <argument>20</argument>
+                        <argument>33332</argument>
+                    </arguments-->
+                    <arguments>
+                        <argument>20</argument>
+                        <argument>10</argument>
+                        <argument>random</argument>
+                        <argument>100</argument>
+                        <argument>2222222332222222</argument>
+                    </arguments>
+                </configuration>
 
+            </plugin>
+        </plugins>
+    </build>
 </project>
