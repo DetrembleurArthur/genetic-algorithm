@@ -58,7 +58,10 @@ public class Environnement
             String filename = args[2];
             int ticks = Integer.parseInt(args[3]);
             Environnement env = new Environnement(width, height, ticks);
-            env.load_env(filename);
+            if(filename.equals("random"))
+                env.generateRandomGrid();
+            else
+                env.load_env(filename);
             return env;
         }
         return null;
@@ -171,7 +174,6 @@ public class Environnement
         {
             if(movementsChain != null)
                 movementsChain.add(new Move(movement, null, false));
-            tickPassed++;
             while(currentTick + tickPassed < maxTickCount && inAir(temp))
             {
                 if(inWall(new Vector2i(temp).add(move.x, 1)))
@@ -190,6 +192,7 @@ public class Environnement
             if(movementsChain != null)
                 movementsChain.add(new Move(Movements.BLOCKED, movement, false));
         }
+        tickPassed++;
         return tickPassed;
     }
 
