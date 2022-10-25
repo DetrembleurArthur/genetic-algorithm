@@ -38,6 +38,32 @@ public class Environnement
         grid = new byte[height][width];
     }
 
+    public static Environnement buildFromArgs(String[] args, Creature creature)
+    {
+        if(args.length == 5)
+        {
+            Environnement env = buildFromArgs(args);
+            creature.createMovementsFromString(args[4]);
+            return env;
+        }
+        return null;
+    }
+
+    public static Environnement buildFromArgs(String[] args)
+    {
+        if(args.length == 4)
+        {
+            int width = Integer.parseInt(args[0]);
+            int height = Integer.parseInt(args[1]);
+            String filename = args[2];
+            int ticks = Integer.parseInt(args[3]);
+            Environnement env = new Environnement(width, height, ticks);
+            env.load_env(filename);
+            return env;
+        }
+        return null;
+    }
+
     public void load_env(String filename)
     {
         File file = new File(filename);
@@ -183,7 +209,7 @@ public class Environnement
             i += move(finalPosition, move, movementsChain, i);
         }
         double distance = finalPosition.distance(endPosition);
-        System.out.println("ticks: " + i + " / " + maxTickCount);
+        //System.out.println("ticks: " + i + " / " + maxTickCount);
         return new EnvCalculationResult(finalPosition, distance, i, creature.alreadyUsed());
     }
 
@@ -216,7 +242,7 @@ public class Environnement
         System.out.println("+\033[0m");
     }
 
-    public void animate(Creature creature, int tickMs) throws InterruptedException
+    public void animate(Creature creature, int tickMs)
     {
         ArrayList<Move> movementsChain = new ArrayList<>();
         EnvCalculationResult result = calculateFinalPosition(creature, movementsChain);
@@ -235,13 +261,19 @@ public class Environnement
                     System.out.print(" -> " + sub.getOrigin());
                 j++;
             }
-            Thread.sleep(tickMs);
             tick++;
-            System.out.println("Tick : " + tick + " / " + maxTickCount);
-            System.out.println("real: " + move.getReal() + " origin: " + move.getOrigin() + " " + (move.isEnvironmental() ? "environmental movement" : "creature movement"));
+            System.out.println("\nTick : " + tick + " / " + maxTickCount);
+            System.out.println("real: " + move.getReal() + " origin: " + move.getOrigin() + " " + (move.isEnvironmental() ? "\033[92menvironmental movement\033[0m" : "\033[93mcreature movement\033[0m"));
             position.add(move.getReal().getMoveVector());
             showGrid(position);
             i++;
+            try
+            {
+                Thread.sleep(tickMs);
+            } catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
         }
         System.out.println(result);
     }

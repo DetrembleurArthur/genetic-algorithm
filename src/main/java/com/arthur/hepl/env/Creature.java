@@ -23,6 +23,7 @@ public class Creature
         }
     }
 
+
     public void addMovement(Movements move)
     {
         movements.add(move);

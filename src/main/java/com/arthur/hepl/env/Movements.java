@@ -1,5 +1,6 @@
 package com.arthur.hepl.env;
 
+import org.joml.Random;
 import org.joml.Vector2i;
 
 @Immutable
@@ -37,5 +38,11 @@ public enum Movements
             }
         }
         return null;
+    }
+
+    public static Movements random()
+    {
+        Random random = new Random();
+        return Movements.values()[random.nextInt(Movements.values().length - 1)];
     }
 }
