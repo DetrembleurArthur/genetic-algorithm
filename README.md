@@ -15,6 +15,11 @@ Les arguments à modifier sont dans le fichier pom.xml dans les balises <argumen
 </arguments>
 ```
 
+## Déploiement
+Pour déployer l'application: `mvn clean package`
+Pour exécuter ce .jar : `cd target`
+`java -jar genetic-1.0-SNAPSHOT-jar-with-dependencies.jar 20 10 ../env.t`
+
 ## Système d'axes
 
 En ce qui concerne l'environnement de la créature, le système d'axe est le suivant:

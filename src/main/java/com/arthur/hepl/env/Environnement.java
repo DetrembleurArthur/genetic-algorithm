@@ -251,11 +251,12 @@ public class Environnement
         EnvCalculationResult result = calculateFinalPosition(creature, movementsChain);
         Vector2i position = new Vector2i(startPosition);
         int tick = 0;
-        showGrid(null);
         int i = 0;
         for(Move move : movementsChain)
         {
+            System.out.println("\033[0;0H");
             int j = 0;
+
             for(Move sub : movementsChain)
             {
                 if(i == j)
@@ -304,17 +305,5 @@ public class Environnement
     public Vector2i getEndPosition()
     {
         return new Vector2i(endPosition);
-    }
-
-    public static void main(String[] args) throws InterruptedException
-    {
-        Environnement env = new Environnement(20, 10, 50);
-        env.load_env("env.txt");
-        //env.generateRandomGrid();
-
-        Creature creature = new Creature();
-        creature.createMovementsFromString("22222223332222");
-
-        env.animate(creature, 1000);
     }
 }

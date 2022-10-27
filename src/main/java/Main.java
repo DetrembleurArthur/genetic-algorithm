@@ -50,14 +50,16 @@ public class Main
             algorithm.run();
 
             Genome<Movements> genome = algorithm.getFinalGenome();
-            for(Movements move : genome.getGenes())
-            {
-                System.out.println(move);
-            }
+           
 
             Creature creature = new Creature();
             genome.getGenes().forEach(creature::addMovement);
             env.animate(creature, 1500);
+
+            for(Movements move : genome.getGenes())
+            {
+                System.out.println(move);
+            }
         }
     }
 
