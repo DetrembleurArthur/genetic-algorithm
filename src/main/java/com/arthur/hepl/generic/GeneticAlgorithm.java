@@ -1,9 +1,12 @@
 package com.arthur.hepl.generic;
 
+import lombok.SneakyThrows;
+
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 /**
@@ -25,48 +28,81 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     private double crossoverRate;
     private double mutationRate;
     private StopGeneticCriteria<R> stopGeneticCriteria = new StopGeneticCriteria.StrictStopGeneticCriteria<>();
-    private final Comparator<Genome<T>> fitnessComparator = (g1, g2) -> {
-        R fitness1 = fitnessCalculator.calculateFitness(g1, solution);
-        R fitness2 = fitnessCalculator.calculateFitness(g2, solution);
-        return fitness1.compareTo(fitness2);
-    };
+    private final Comparator<FitnessCache<T, R>> fitnessComparator = Comparator.comparing(o -> {
+        try
+        {
+            return o.getFitnessFuture().get();
+        } catch (InterruptedException | ExecutionException e)
+        {
+            return null;
+        }
+    });
     private Genome<T> finalGenome;
 
+    private ArrayList<FitnessCache<T, R>> fitnessCache = new ArrayList<>();
+    private ArrayList<FitnessCache<T, R>> fitnessCacheBackup = new ArrayList<>();
+    private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);
+
+    public void stopThreadPool()
+    {
+        executor.shutdown();
+    }
+
+    private void computeFitness(Population<T> population)
+    {
+        for(Genome<T> genome : population.getGenomes())
+        {
+            Future<R> fitnessFuture = executor.submit(() -> fitnessCalculator.calculateFitness(genome, solution));
+            FitnessCache<T, R> cache = new FitnessCache<>(genome, fitnessFuture);
+            fitnessCache.add(cache);
+        }
+    }
+
+    @SneakyThrows
     @Override
     public void run()
     {
+        Instant start = Instant.now();
         Population<T> population = new Population<>();
         population.randomize(populationSize, genomeSize, randomizer);
+        computeFitness(population);
         R fittest = null;
         int iteration = 0;
-        while(iteration < maxIterations && !stopGeneticCriteria.mustBeStopped(fittest = getFittestValue(population), solutionFitness))
+        while(iteration < maxIterations && !stopGeneticCriteria.mustBeStopped(fittest = getFittest().getFitnessFuture().get(), solutionFitness))
         {
-            population = evolve(population);
+            evolve();
             iteration++;
         }
+        Instant end = Instant.now();
         System.out.println("Iterations: " + iteration);
         System.out.println("Fittest: " + fittest);
-        finalGenome = getFittest(population);
+        System.out.println("Time: " + (end.toEpochMilli() - start.toEpochMilli()) + "ms");
+        finalGenome = getFittest().getGenome();
     }
     
-    public Population<T> evolve(Population<T> population)
+    public void evolve()
     {
         Population<T> temp = new Population<>();
-        List<Genome<T>> sorted = population.getGenomes()
+        List<FitnessCache<T, R>> sorted = fitnessCache
                 .stream()
                 .sorted(fitnessComparator)
                 .limit(bestKeepNumber)
                 .collect(Collectors.toList());
-        temp.getGenomes().addAll(sorted);
+        temp.getGenomes().addAll(sorted.stream().map(FitnessCache::getGenome).collect(Collectors.toList()));
+        fitnessCacheBackup.addAll(sorted);
         for (int i = bestKeepNumber; i < populationSize; i++)
         {
-            Genome<T> genome1 = selection.select(population);
-            Genome<T> genome2 = selection.select(population);
+            Genome<T> genome1 = selection.select();
+            Genome<T> genome2 = selection.select();
             Genome<T> child = crossover(genome1, genome2);
             mutate(child);
+            Future<R> fitnessFuture = executor.submit(() -> fitnessCalculator.calculateFitness(child, solution));
+            FitnessCache<T, R> cache = new FitnessCache<>(child, fitnessFuture);
+            fitnessCacheBackup.add(cache);
             temp.getGenomes().add(child);
         }
-        return temp;
+        fitnessCache = fitnessCacheBackup;
+        fitnessCacheBackup = new ArrayList<>();
     }
 
     private Genome<T> crossover(Genome<T> parent1, Genome<T> parent2)
@@ -96,20 +132,10 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         }
     }
 
-    public Genome<T> getFittest(Population<T> population)
+    public FitnessCache<T, R> getFittest()
     {
-        Optional<Genome<T>> optional = population.getGenomes()
-            .stream()
-            .max(fitnessComparator);
-        return optional.orElse(null);
-    }
-
-    public R getFittestValue(Population<T> population)
-    {
-        Optional<Genome<T>> optional = population.getGenomes()
-            .stream()
-            .max(fitnessComparator);
-        return optional.map(genome -> fitnessCalculator.calculateFitness(genome, solution)).orElse(null);
+        return fitnessCache.stream()
+                .max(fitnessComparator).orElse(null);
     }
 
     public int getPopulationSize() {
@@ -200,10 +226,6 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         this.mutationRate = mutationRate;
     }
 
-    public Comparator<Genome<T>> getFitnessComparator() {
-        return fitnessComparator;
-    }
-
     public Genome<T> getFinalGenome() {
         return finalGenome;
     }
@@ -216,5 +238,25 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     public void setStopGeneticCriteria(StopGeneticCriteria<R> stopGeneticCriteria)
     {
         this.stopGeneticCriteria = stopGeneticCriteria;
+    }
+
+    public Comparator<FitnessCache<T, R>> getFitnessComparator()
+    {
+        return fitnessComparator;
+    }
+
+    public ArrayList<FitnessCache<T, R>> getFitnessCache()
+    {
+        return fitnessCache;
+    }
+
+    public ArrayList<FitnessCache<T, R>> getFitnessCacheBackup()
+    {
+        return fitnessCacheBackup;
+    }
+
+    public ThreadPoolExecutor getExecutor()
+    {
+        return executor;
     }
 }

@@ -2,6 +2,7 @@ package com.arthur.hepl.generic;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.ExecutionException;
 
 public class RouletteSelection<T, R extends Comparable<R>, S> implements Selection<T>
 {
@@ -15,13 +16,20 @@ public class RouletteSelection<T, R extends Comparable<R>, S> implements Selecti
     }
 
     @Override
-    public Genome<T> select(Population<T> population)
+    public Genome<T> select()
     {
         final ArrayList<Double> fitnessCache = new ArrayList<>();
-        double totalFitness = population.getGenomes()
+        double totalFitness = algorithm.getFitnessCache()
                 .stream()
-                .mapToDouble(genome -> {
-                    R fitness = algorithm.getFitnessCalculator().calculateFitness(genome, algorithm.getSolution());
+                .mapToDouble(cache -> {
+                    R fitness = null;
+                    try
+                    {
+                        fitness = cache.getFitnessFuture().get();
+                    } catch (InterruptedException | ExecutionException e)
+                    {
+                        e.printStackTrace();
+                    }
                     double doubleFitness = fitnessToDouble.map(fitness);
                     fitnessCache.add(doubleFitness);
                     return doubleFitness;
@@ -45,6 +53,6 @@ public class RouletteSelection<T, R extends Comparable<R>, S> implements Selecti
                 }
             }
         }
-        return population.getGenomes().get(selectedIndex);
+        return algorithm.getFitnessCache().get(selectedIndex).getGenome();
     }
 }

@@ -1,30 +1,28 @@
 package com.arthur.hepl.generic;
 
 import java.util.Comparator;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.concurrent.ExecutionException;
 
-public class TournamentSelection<T> implements Selection<T>
+public class TournamentSelection<T, R extends Comparable<R>> implements Selection<T>
 {
-    private int tournamentSize;
-    private GeneticAlgorithm<T, ?, ?> algorithm;
+    private final int tournamentSize;
+    private final GeneticAlgorithm<T, R, ?> algorithm;
 
-    public TournamentSelection(int tournamentSize, GeneticAlgorithm<T, ?, ?> algorithm)
+    public TournamentSelection(int tournamentSize, GeneticAlgorithm<T, R, ?> algorithm)
     {
         this.tournamentSize = tournamentSize;
         this.algorithm = algorithm;
     }
 
     @Override
-    public Genome<T> select(Population<T> population)
+    public Genome<T> select()
     {
-        Population<T> tournament = new Population<>();
-        List<Genome<T>> temp = population.getGenomes()
+        FitnessCache<T, R> fitnessCache = algorithm.getFitnessCache()
                 .stream()
                 .sorted(Comparator.comparingDouble(o -> Math.random()))
                 .limit(tournamentSize)
-                .collect(Collectors.toList());
-        tournament.getGenomes().addAll(temp);
-        return algorithm.getFittest(tournament);
+                .max(algorithm.getFitnessComparator()).orElse(null);
+        assert fitnessCache != null;
+        return fitnessCache.getGenome();
     }
 }

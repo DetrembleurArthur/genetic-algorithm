@@ -24,7 +24,7 @@ public class Main
         {
             GeneticAlgorithm<Movements, Double, Vector2i> algorithm = new GeneticAlgorithm<>();
             GeneRandomizer<Movements> randomizer = Movements::random;
-            TournamentSelection<Movements> tournamentSelection = new TournamentSelection<>(5, algorithm);
+            TournamentSelection<Movements, Double> tournamentSelection = new TournamentSelection<>(5, algorithm);
             FitnessCalculator<Double, Vector2i> fitnessCalculator = (genome, solution) -> {
                 Creature creature = new Creature();
                 genome.getGenes().forEach(move -> creature.addMovement((Movements) move));
@@ -34,27 +34,28 @@ public class Main
                 double ticksScore = 1.0 / result.getTickCount();
                 return distScore + movesUsedScore + ticksScore;
             };
-            algorithm.setBestKeepNumber(1);
+            algorithm.setBestKeepNumber(5);
             algorithm.setCrossoverRate(0.5);
             algorithm.setMutationRate(0.05);
-            algorithm.setGenomeSize(30);
+            algorithm.setGenomeSize(10);
             algorithm.setMaxIterations(20000);
             algorithm.setPopulationSize(25);
             algorithm.setSolution(env.getEndPosition());
-            algorithm.setSolutionFitness(1.151);
+            algorithm.setSolutionFitness(1.236);
             algorithm.setFitnessCalculator(fitnessCalculator);
             algorithm.setRandomizer(randomizer);
             algorithm.setSelection(tournamentSelection);
             algorithm.setStopGeneticCriteria((bestFitness, solutionFitness) -> bestFitness >= solutionFitness);
 
             algorithm.run();
+            algorithm.stopThreadPool();
 
             Genome<Movements> genome = algorithm.getFinalGenome();
            
 
             Creature creature = new Creature();
             genome.getGenes().forEach(creature::addMovement);
-            env.animate(creature, 1500);
+            env.animate(creature, 500);
 
             for(Movements move : genome.getGenes())
             {
