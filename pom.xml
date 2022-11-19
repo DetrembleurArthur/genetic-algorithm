@@ -74,11 +74,11 @@
                         <argument>33332</argument>
                     </arguments-->
                     <arguments>
-                        <argument>20</argument>
-                        <argument>10</argument>
-                        <argument>random</argument>
+                        <argument>12</argument>
+                        <argument>6</argument>
+                        <argument>env-x-y.txt</argument>
                         <argument>100</argument>
-                        <argument>2222222332222222</argument>
+                        <argument>COORD_Y_TO_DOWN</argument>
                     </arguments>
                 </configuration>
 

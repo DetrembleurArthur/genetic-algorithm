@@ -42,7 +42,7 @@ public class RouletteSelection<T, R extends Comparable<R>, S> implements Selecti
         double rand = Math.random() * Arrays.stream(probabilities).max().getAsDouble();
         double delta = Double.MAX_VALUE;
         int selectedIndex = 0;
-        for(int i = 0; i < probabilities.length; i++)
+        for (int i = 0; i < probabilities.length; i++)
         {
             if (probabilities[i] >= rand)
             {

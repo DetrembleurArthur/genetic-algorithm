@@ -1,10 +1,12 @@
 package com.arthur.hepl.env;
 
+import lombok.SneakyThrows;
 import org.joml.Vector2i;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Scanner;
@@ -13,6 +15,13 @@ import java.util.Scanner;
 public class Environnement
 {
     private static final HashMap<Byte, String> envCodes = new HashMap<>();
+
+    enum EnvFileType
+    {
+        COORD_Y_TO_DOWN,
+        COORD_Y_TO_UP,
+        TILES
+    }
 
     static
     {
@@ -40,7 +49,7 @@ public class Environnement
 
     public static Environnement buildFromArgs(String[] args, Creature creature)
     {
-        if(args.length == 5)
+        if (args.length == 5)
         {
             Environnement env = buildFromArgs(args);
             creature.createMovementsFromString(args[4]);
@@ -51,23 +60,26 @@ public class Environnement
 
     public static Environnement buildFromArgs(String[] args)
     {
-        if(args.length == 4)
+        if (args.length >= 4)
         {
             int width = Integer.parseInt(args[0]);
             int height = Integer.parseInt(args[1]);
             String filename = args[2];
             int ticks = Integer.parseInt(args[3]);
             Environnement env = new Environnement(width, height, ticks);
-            if(filename.equals("random"))
-                env.generateRandomGrid();
+            EnvFileType fileType = EnvFileType.TILES;
+            if (args.length == 5)
+                fileType = EnvFileType.valueOf(args[4]);
+            if (filename.equals("random"))
+                env.generateRandomGrid(fileType);
             else
-                env.load_env(filename);
+                env.load_env(filename, fileType);
             return env;
         }
         return null;
     }
 
-    public void load_env(String filename)
+    public void load_env(String filename, EnvFileType fileType)
     {
         File file = new File(filename);
         if (file.exists())
@@ -75,23 +87,49 @@ public class Environnement
             try
             {
                 Scanner scanner = new Scanner(new FileInputStream(file));
-                int i = 0;
-                while (scanner.hasNextInt())
+                if (fileType.equals(EnvFileType.TILES))
                 {
-                    int value = scanner.nextInt();
-                    int l = i / grid[0].length;
-                    int c = i - grid[0].length * (i / grid[0].length);
-                    grid[l][c] = (byte)value;
-                    if (value == Cases.START)
+                    int i = 0;
+                    while (scanner.hasNextInt())
                     {
-                        startPosition.set(c, l);
+                        int value = scanner.nextInt();
+                        int l = i / grid[0].length;
+                        int c = i - grid[0].length * (i / grid[0].length);
+                        grid[l][c] = (byte) value;
+                        if (value == Cases.START)
+                        {
+                            startPosition.set(c, l);
+                        } else if (value == Cases.END)
+                        {
+                            endPosition.set(c, l);
+                        }
+                        i++;
                     }
-                    else if (value == Cases.END)
+                } else
+                {
+                    int i = 0;
+                    while (scanner.hasNextLine())
                     {
-                        endPosition.set(c, l);
+                        String[] line = scanner.nextLine().split(" ");
+                        int x = Integer.parseInt(line[0]);
+                        int y = Integer.parseInt(line[1]);
+                        if (fileType.equals(EnvFileType.COORD_Y_TO_UP))
+                            y = height - y - 1;
+                        byte value = Cases.WALL;
+                        if (i == 0)
+                        {
+                            value = Cases.START;
+                            startPosition.set(x, y);
+                        } else if (i == 1)
+                        {
+                            value = Cases.END;
+                            endPosition.set(x, y);
+                        }
+                        grid[y][x] = value;
+                        i++;
                     }
-                    i++;
                 }
+
             } catch (FileNotFoundException e)
             {
                 e.printStackTrace();
@@ -100,44 +138,55 @@ public class Environnement
     }
 
     //à optimiser
-    public void generateRandomGrid()
+    @SneakyThrows
+    public void generateRandomGrid(EnvFileType fileType)
     {
         int startPosition = (int) ((width / 4) * Math.random());
-        int endPosition = (int) ((width-1) - (width / 4) * Math.random());
-        if(Math.random() <= 0.5)
+        int endPosition = (int) ((width - 1) - (width / 4) * Math.random());
+        if (Math.random() <= 0.5)
         {
             int temp = startPosition;
             startPosition = endPosition;
             endPosition = temp;
         }
         int precHeight = (int) (height / 2 + Math.random() * (height / 4.0));
-        for(int x = 0; x < width; x++)
+        for (int x = 0; x < width; x++)
         {
             int localHeight = precHeight;
-            if(Math.random() < 0.8)
+            if (Math.random() < 0.8)
             {
                 localHeight += (Math.random() >= 0.5 ? 1 : -1);
-                if(localHeight < 0)
+                if (localHeight < 0)
                     localHeight = 0;
-                else if(localHeight >= height)
+                else if (localHeight >= height)
                     localHeight = height - 1;
             }
-            for(int y = height - 1; y > height - localHeight; y--)
+            for (int y = height - 1; y > height - localHeight; y--)
             {
                 grid[y][x] = Cases.WALL;
             }
-            if(startPosition == x)
+            if (startPosition == x)
             {
                 grid[height - localHeight][startPosition] = Cases.START;
                 this.startPosition.set(startPosition, height - localHeight);
-            }
-            else if(endPosition == x)
+            } else if (endPosition == x)
             {
                 grid[height - localHeight][endPosition] = Cases.END;
                 this.endPosition.set(endPosition, height - localHeight);
             }
             precHeight = localHeight;
         }
+        File file = new File("random-env.txt");
+        FileWriter writer = new FileWriter(file);
+        for(int i = 0; i < height; i++)
+        {
+            for(int j = 0; j < width; j++)
+            {
+                writer.write(grid[i][j] + " ");
+            }
+            writer.write("\n");
+        }
+        writer.flush();
     }
 
     public boolean outOfBand(Vector2i position)
@@ -145,9 +194,9 @@ public class Environnement
         return position.x < 0 || position.x >= width || position.y < 0 || position.y >= height;
     }
 
-    public byte getCase(Vector2i position)
+    public synchronized byte getCase(Vector2i position)
     {
-        if(!outOfBand(position))
+        if (!outOfBand(position))
             return grid[position.y][position.x];
         return Cases.OOB;
     }
@@ -170,26 +219,25 @@ public class Environnement
         Vector2i move = movement.getMoveVector();
         Vector2i temp = new Vector2i(position);
         temp.add(move);
-        if(!inWall(temp))
+        if (!inWall(temp))
         {
-            if(movementsChain != null)
+            if (movementsChain != null)
                 movementsChain.add(new Move(movement, null, false));
-            while(currentTick + tickPassed < maxTickCount && inAir(temp))
+            while (currentTick + tickPassed < maxTickCount && inAir(temp))
             {
-                if(inWall(new Vector2i(temp).add(move.x, 1)))
+                if (inWall(new Vector2i(temp).add(move.x, 1)))
                 {
                     move.x = 0;
                 }
                 temp.add(move.x, 1);
-                if(movementsChain != null)
+                if (movementsChain != null)
                     movementsChain.add(new Move(Movements.fromVector(new Vector2i(move.x, 1)), null, true));
                 tickPassed++;
             }
             position.set(temp);
-        }
-        else
+        } else
         {
-            if(movementsChain != null)
+            if (movementsChain != null)
                 movementsChain.add(new Move(Movements.BLOCKED, movement, false));
         }
         tickPassed++;
@@ -204,14 +252,22 @@ public class Environnement
     public EnvCalculationResult calculateFinalPosition(Creature creature, ArrayList<Move> movementsChain)
     {
         creature.prepareQueue();
-        Vector2i finalPosition = new Vector2i(startPosition);
+        Vector2i finalPosition;
+        Vector2i officialEndPosition;
+        int tickCountLimit;
+        synchronized (this)
+        {
+            finalPosition = new Vector2i(startPosition);
+            officialEndPosition = new Vector2i(endPosition);
+            tickCountLimit = maxTickCount;
+        }
         Movements move;
         int i = 0;
-        while(i < maxTickCount && !arrived(finalPosition) && (move = creature.nextMovement()) != null)
+        while (i < tickCountLimit && !arrived(finalPosition) && (move = creature.nextMovement()) != null)
         {
             i += move(finalPosition, move, movementsChain, i);
         }
-        double distance = finalPosition.distance(endPosition);
+        double distance = finalPosition.distance(officialEndPosition);
         //System.out.println("ticks: " + i + " / " + maxTickCount);
         return new EnvCalculationResult(finalPosition, distance, i, creature.alreadyUsed());
     }
@@ -228,11 +284,10 @@ public class Environnement
             for (int x = 0; x < width; x++)
             {
                 byte gridCase = grid[y][x];
-                if(creaturePosition != null && creaturePosition.equals(x, y))
+                if (creaturePosition != null && creaturePosition.equals(x, y))
                 {
                     System.out.print(envCodes.get(Cases.CREATURE) + " ");
-                }
-                else
+                } else
                 {
                     System.out.print(envCodes.get(gridCase) + " ");
                 }
@@ -252,14 +307,14 @@ public class Environnement
         Vector2i position = new Vector2i(startPosition);
         int tick = 0;
         int i = 0;
-        for(Move move : movementsChain)
+        for (Move move : movementsChain)
         {
             System.out.println("\033[0;0H");
             int j = 0;
 
-            for(Move sub : movementsChain)
+            for (Move sub : movementsChain)
             {
-                if(i == j)
+                if (i == j)
                     System.out.print(" -> \033[95m" + sub.getOrigin() + "\033[0m");
                 else
                     System.out.print(" -> " + sub.getOrigin());
@@ -305,5 +360,14 @@ public class Environnement
     public Vector2i getEndPosition()
     {
         return new Vector2i(endPosition);
+    }
+
+
+    public static void main(String[] args)
+    {
+        Environnement environnement = Environnement.buildFromArgs(new String[]{
+                "12", "6", "env-x-y.txt", "100", "COORD_Y_TO_DOWN"
+        });
+        environnement.showGrid(new Vector2i());
     }
 }

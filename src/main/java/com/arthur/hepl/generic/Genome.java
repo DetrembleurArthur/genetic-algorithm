@@ -21,4 +21,12 @@ public class Genome<T>
     {
         return genes;
     }
+
+    @Override
+    public Genome<T> clone()
+    {
+        Genome<T> copy = new Genome<>();
+        copy.genes.addAll(genes);
+        return copy;
+    }
 }

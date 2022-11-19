@@ -7,18 +7,100 @@ Les arguments à modifier sont dans le fichier pom.xml dans les balises <argumen
 
 ```xml
 <arguments>
-    <argument>50</argument> #width
-    <argument>30</argument> #height
-    <argument>env.txt</argument> #filename
-    <argument>20</argument> #T
-    <argument>33332</argument> #mouvements
+    <argument>12</argument> #width
+    <argument>6</argument> #height
+    <argument>env-x-y.txt</argument> #filename
+    <argument>100</argument> #T
+    <argument>COORD_Y_TO_DOWN</argument> #type de fichier d'environnement
 </arguments>
 ```
 
+Le type de fichier d'environnement peut être:
+
+```bash
+COORD_Y_TO_DOWN
+# contient les coordonnées des éléments de l'environnement (x y)
+# la coordonnée y augmente de haut en bas
+7 5 => départ
+8 5 => arrivée
+9 5 => Murs...
+10 5
+11 5
+0 1
+0 2
+0 3
+0 4
+11 1
+11 2
+11 3
+11 4
+3 4
+6 4
+7 4
+9 4
+10 4
+7 3
+9 3
+10 3
+10 2
+
+COORD_Y_TO_UP
+# contient les coordonnées des éléments de l'environnement (x y)
+# la coordonnée y augmente de bas en haut
+# inverse l'axe y par rapport à l'exemple précédent
+TILES
+# contient toutes les cases d'un environnement
+1 1 1 1 1 1 1 1 1 1 1 1
+1 0 0 0 0 0 0 0 0 0 3 1
+1 0 0 0 0 0 0 0 0 0 1 1
+1 0 0 0 0 0 0 1 0 1 1 1
+1 2 0 1 0 0 1 1 0 1 1 1
+1 1 1 1 1 1 1 1 1 1 1 1
+
+```
+
+Il est possible de placer "random" à la place d'un nom de fichier d'environnement.
+
+Le programme va alors générer un environnement aléatoire basé sur la taille renseignée par l'utilisateur.
+
+Cet environnement sera également enregistré sur la machine.
+
+
+
 ## Déploiement
+
 Pour déployer l'application: `mvn clean package`
 Pour exécuter ce .jar : `cd target`
-`java -jar genetic-1.0-SNAPSHOT-jar-with-dependencies.jar 20 10 ../env.txt`
+`java -jar .\genetic-1.0-SNAPSHOT-jar-with-dependencies.jar 12 6 ..\env-x-y.txt 100 COORD_Y_TO_DOWN`
+
+Attention, le programme requiert un fichier genetic_game.properties.
+
+Ce dernier doit se trouver au même endroit que le JAR.
+
+Le fichier contient les données de paramétrage de l'algorithme génétique:
+
+```properties
+best.keep.number=5
+crossover.rate=0.5
+mutation.rate=0.05
+genome.size=10
+max.iterations=10000
+population.size=25
+tournament.size=5
+#fitness idéale à atteindre (l'algo s'arrête si elle est dépassée)
+solution.fitness=3.236111
+#le nombre de threads lancés dans le pool executor
+thread.pool.size=4
+#bloque le programme à chaque itération si activé (l'utilisateur peut ainsi vérifier le status de l'algorithme et lancer n itérations à la fois)
+manually.controlled=false
+#le temps entre chaque mouvement de créature
+env.anim.time=500
+#enregistre à chaque itération les fitness de chaque génome dans un fichier (voir record.file)
+record.population=false
+record.file=population.csv
+```
+
+
 
 ## Système d'axes
 
@@ -61,10 +143,16 @@ private int bestKeepNumber;
 private double crossoverRate;
 //probabilité d'avoir une mutation par itération
 private double mutationRate;
-//génome final (représente le génome ayant atteint ou éatnt le plus proche de la solution)
-private Genome<T> finalGenome;
 //représente l'algorithme de sélection de gènes pour le crossover
 private Selection<T> selection;
+//voir: les données du fichier properties
+private boolean manuallyControlled = false;
+//fonction appelée à chaque fois que l'utilisateur veut consulter le status de l'algorithme
+private StatusRunner<T> statusRunner;
+//résultat de l'algorithme (fitness, génome final, itérations, temps en ms)
+private GeneticResult<T, R> geneticResult;
+//permet d'enregistrer les données des génomes à chaque itération (voir genetic_game.properties)
+private Recorder recorder;
 ```
 
 ## Précision sur les interfaces ajoutées
@@ -124,7 +212,124 @@ public interface StopGeneticCriteria<R extends Comparable<R>>
 
 Cette interface est à implémenter afin que l'algorithme sache quand s'arrêter. Il y a comparaison entre le meilleurs fitness de la population avec la fitness cible.
 
-## Exemples d'application
+### Interface StatusRunner
+
+```java
+public interface StatusRunner<T>
+{
+    void run(Genome<T> genome);
+}
+```
+
+Méthode appelée à chaque fois que l'utilisateur veut consulter le status de l'algorithme génétique.
+
+
+
+## Parallélisation
+
+Afin d'économiser du temps de calcul un pool de thread est utilisé afin de calculer les fitness des différents génomes.
+
+Les fitness sont calculées:
+
++ Au démarrage de l'algorithme, lorsque la population est générée
+
+  ```java
+  for (Genome<T> genome : population.getGenomes())
+  {
+      Future<R> fitnessFuture = executor.submit(() -> fitnessCalculator.calculateFitness(genome, solution));
+      FitnessCache<T, R> cache = new FitnessCache<>(genome, fitnessFuture);
+      fitnessCache.add(cache);
+  }
+  ```
+
+  
+
++ Lorsqu'un génome vient d'être créé après crossover et mutation
+
+  ```java
+  for (int i = bestKeepNumber; i < populationSize; i++)
+  {
+      Genome<T> genome1 = selection.select();
+      Genome<T> genome2 = selection.select();
+      Genome<T> child = crossover(genome1, genome2);
+      mutate(child);
+      Future<R> fitnessFuture = executor.submit(() -> fitnessCalculator.calculateFitness(child, solution));
+      FitnessCache<T, R> cache = new FitnessCache<>(child, fitnessFuture);
+      fitnessCacheBackup.add(cache);
+      temp.getGenomes().add(child);
+  }
+  ```
+
+Chaque calcule de fitness est envoyé au thread executor. Ce dernier renvoie directement un Futur qui permettra lorsque l'algorithme aura besoin d'avoir la fitness de récupérer cette dernière.
+
+Ce futur est associé avec le génome dans un objet FitnessCache.
+
+La population de génome n'est pas représenté par la classe Population mais bien par une liste de FitnessCache.
+
+Associer le génome avec sa fitness est plus rapide que de recalculer sa fitness à chaque fois que l'on veut y accéder.
+
+En fin de compte la classe Population ne sert qu'à initialiser les génomes.
+
+En ce qui concerne les protections d'accès concurrents, deux verrous ont été placés:
+
++ Méthode calculateFinalPosition de l'environnement
+
+```java
+Vector2i finalPosition;
+Vector2i officialEndPosition;
+int tickCountLimit;
+synchronized (this)
+{
+    finalPosition = new Vector2i(startPosition);
+    officialEndPosition = new Vector2i(endPosition);
+    tickCountLimit = maxTickCount;
+}
+```
+
++ Lors de l'accès à une case du tableau
+
+```java
+public synchronized byte getCase(Vector2i position)
+{
+    if (!outOfBand(position))
+        return grid[position.y][position.x];
+    return Cases.OOB;
+}
+```
+
+
+
+## Performance
+
+Après avoir exécuté 100x l'algorithme génétique pour un environnement donné de taille (12, 6), le temps moyen d'exécution est de:
+
+714ms pour 2928 itérations en moyenne.
+
+4 threads étaient actifs dans le pool executor.
+
+
+
+## Recherche d'un critère d'arrêt
+
+Afin de trouver un bon critère d'arrêt (fitness limite), je laisse tourner l'algorithme jusqu'à son nombre d'itération maximum.
+
+Ensuite, je récolte les fitness de tous les génomes pour chaque itération et je regarde si elles tendent vers un maximum.
+
+Je réitère cette opération et je regarde quelle est la fitness maximum qui apparait.
+
+Cette dernière devient alors mon critère d'arrêt.
+
+
+
+
+
+
+
+
+
+## Exemples d'application 
+
+*Dans ces exemples, le fichier genetic_game n'est pas utilisé*
 
 ### Trouver une chaine de bits (string)
 

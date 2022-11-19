@@ -3,10 +3,16 @@ import com.arthur.hepl.env.EnvCalculationResult;
 import com.arthur.hepl.env.Environnement;
 import com.arthur.hepl.env.Movements;
 import com.arthur.hepl.generic.*;
+import com.arthur.hepl.perf.Recorder;
+import lombok.SneakyThrows;
 import org.joml.Vector2i;
 
-import java.util.Random;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Properties;
 
+//slide 22 du lab 2 (environnement
 public class Main
 {
     private static void simpleCreatureAnimation(String[] args)
@@ -17,14 +23,48 @@ public class Main
         env.animate(creature, 500);
     }
 
+    public enum GameProp
+    {
+        BEST_KEEP_NUMBER("best.keep.number"),
+        CROSSOVER_RATE("crossover.rate"),
+        MUTATION_RATE("mutation.rate"),
+        GENOME_SIZE("genome.size"),
+        MAX_ITERATIONS("max.iterations"),
+        POPULATION_SIZE("population.size"),
+        TOURNAMENT_SIZE("tournament.size"),
+        SOLUTION_FITNESS("solution.fitness"),
+        MANUALLY_CONTROLLED("manually.controlled"),
+        ENV_ANIM_TIME("env.anim.time"),
+        RECORD_POPULATION("record.population"),
+        RECORD_FILE("record.file"),
+        THREAD_POOL_SIZE("thread.pool.size");
+        final String name;
+
+        GameProp(String name)
+        {
+            this.name = name;
+        }
+    }
+
+    @SneakyThrows
+    private static Properties getProperties(String filename)
+    {
+        final Properties properties = new Properties();
+        File file = new File(filename);
+        properties.load(new FileReader(filename));
+        System.out.println(properties);
+        return properties;
+    }
+
     private static void geneticCreatureProcess(String[] args)
     {
         Environnement env = Environnement.buildFromArgs(args);
-        if(env != null)
+        if (env != null)
         {
+            Properties properties = getProperties("genetic_game.properties");
             GeneticAlgorithm<Movements, Double, Vector2i> algorithm = new GeneticAlgorithm<>();
             GeneRandomizer<Movements> randomizer = Movements::random;
-            TournamentSelection<Movements, Double> tournamentSelection = new TournamentSelection<>(5, algorithm);
+            TournamentSelection<Movements, Double> tournamentSelection = new TournamentSelection<>(Integer.parseInt((String) properties.getOrDefault(GameProp.TOURNAMENT_SIZE.name, "5")), algorithm);
             FitnessCalculator<Double, Vector2i> fitnessCalculator = (genome, solution) -> {
                 Creature creature = new Creature();
                 genome.getGenes().forEach(move -> creature.addMovement((Movements) move));
@@ -32,119 +72,74 @@ public class Main
                 double distScore = 1.0 / (result.getDistanceWithEndPosition() + 1.0);
                 double movesUsedScore = 1.0 / (result.getMovesUsed() + 1.0);
                 double ticksScore = 1.0 / result.getTickCount();
-                return distScore + movesUsedScore + ticksScore;
+                return distScore * 3 + movesUsedScore + ticksScore;
             };
-            algorithm.setBestKeepNumber(5);
-            algorithm.setCrossoverRate(0.5);
-            algorithm.setMutationRate(0.05);
-            algorithm.setGenomeSize(10);
-            algorithm.setMaxIterations(20000);
-            algorithm.setPopulationSize(25);
+            algorithm.initThreadPool(Integer.parseInt((String) properties.getOrDefault(GameProp.THREAD_POOL_SIZE.name, "5")));
+            algorithm.setBestKeepNumber(Integer.parseInt((String) properties.getOrDefault(GameProp.BEST_KEEP_NUMBER.name, "5")));
+            algorithm.setCrossoverRate(Double.parseDouble((String) properties.getOrDefault(GameProp.CROSSOVER_RATE.name, "0.5")));
+            algorithm.setMutationRate(Double.parseDouble((String) properties.getOrDefault(GameProp.MUTATION_RATE.name, "0.05")));
+            algorithm.setGenomeSize(Integer.parseInt((String) properties.getOrDefault(GameProp.GENOME_SIZE.name, "10")));
+            algorithm.setMaxIterations(Integer.parseInt((String) properties.getOrDefault(GameProp.MAX_ITERATIONS.name, "2000")));
+            algorithm.setPopulationSize(Integer.parseInt((String) properties.getOrDefault(GameProp.POPULATION_SIZE.name, "25")));
             algorithm.setSolution(env.getEndPosition());
-            algorithm.setSolutionFitness(1.236);
+            algorithm.setSolutionFitness(Double.parseDouble((String) properties.getOrDefault(GameProp.SOLUTION_FITNESS.name, "1.236")));
             algorithm.setFitnessCalculator(fitnessCalculator);
             algorithm.setRandomizer(randomizer);
             algorithm.setSelection(tournamentSelection);
             algorithm.setStopGeneticCriteria((bestFitness, solutionFitness) -> bestFitness >= solutionFitness);
 
-            algorithm.run();
+            algorithm.setManuallyControlled(Boolean.parseBoolean((String) properties.getOrDefault(GameProp.MANUALLY_CONTROLLED.name, "false")));
+            int envAnimTimeMs = Integer.parseInt((String) properties.getOrDefault(GameProp.ENV_ANIM_TIME.name, "1000"));
+            algorithm.setStatusRunner(genome -> {
+                Creature creature = new Creature();
+                genome.getGenes().forEach(creature::addMovement);
+                env.animate(creature, envAnimTimeMs);
+            });
+
+            if (Boolean.parseBoolean((String) properties.getOrDefault(GameProp.RECORD_POPULATION.name, "false")))
+            {
+                algorithm.setRecorder(new Recorder((String) properties.getOrDefault(GameProp.RECORD_FILE.name, "population.csv")));
+            }
+
+            double sum = 0;
+            double sumi = 0;
+            for(int i = 0; i < 100; i++)
+            {
+                System.out.println(i + 1);
+                algorithm.run();
+                sum += algorithm.getGeneticResult().getTimeMs();
+                sumi += algorithm.getGeneticResult().getIterations();
+            }
+            System.out.println(sum / 100);
+            System.out.println(sumi / 100);
+
             algorithm.stopThreadPool();
 
-            Genome<Movements> genome = algorithm.getFinalGenome();
+            var result = algorithm.getGeneticResult();
+            Genome<Movements> genome = result.getGenome();
 
 
             Creature creature = new Creature();
             genome.getGenes().forEach(creature::addMovement);
-            env.animate(creature, 500);
+            env.animate(creature, envAnimTimeMs);
 
-            for(Movements move : genome.getGenes())
+            System.out.println("Mouvements:");
+            for (Movements move : genome.getGenes())
             {
-                System.out.println(move);
+                System.out.println("\t" + move);
             }
+
+            System.out.println("\nResume:");
+            System.out.println("Iterations: " + result.getIterations());
+            System.out.println("Temps: " + result.getTimeMs() + "ms");
+            System.out.println("Fitness: " + result.getFitness());
         }
     }
 
-    public static void string()
+    public static void main(String[] args) throws IOException
     {
-        Random random = new Random();
-        GeneticAlgorithm<Character, Integer, String> algorithm = new GeneticAlgorithm<>();
-        GeneRandomizer<Character> randomizer = () -> random.nextBoolean() ? '0' : '1';
-        TournamentSelection<Character, Integer> tournamentSelection = new TournamentSelection<>(5, algorithm);
-        FitnessCalculator<Integer, String> fitnessCalculator = (genome, solution) -> {
-            int sum = 0;
-            for(int i = 0; i < solution.length(); i++)
-            {
-                if(solution.charAt(i) == (char)genome.getGenes().get(i))
-                    sum++;
-            }
-            return sum;
-        };
-        String solution = "0101010101010101010101010101010101010101010101010101010101010101";
-        algorithm.setBestKeepNumber(5);
-        algorithm.setCrossoverRate(0.5);
-        algorithm.setMutationRate(0.05);
-        algorithm.setGenomeSize(solution.length());
-        algorithm.setMaxIterations(10000);
-        algorithm.setPopulationSize(25);
-        algorithm.setSolution(solution);
-        algorithm.setSolutionFitness(solution.length());
-        algorithm.setFitnessCalculator(fitnessCalculator);
-        algorithm.setRandomizer(randomizer);
-        algorithm.setSelection(tournamentSelection);
-
-        algorithm.run();
-        algorithm.stopThreadPool();
-
-        Genome<Character> genome = algorithm.getFinalGenome();
-        for(Character c : genome.getGenes())
-        {
-            System.out.print(c);
-        }
-        System.out.println();
-    }
-
-    public static void number()
-    {
-        Random random = new Random();
-        GeneticAlgorithm<Integer, Integer, Integer> algorithm = new GeneticAlgorithm<>();
-        GeneRandomizer<Integer> randomizer = () -> random.nextInt(10000);
-        TournamentSelection<Integer, Integer> tournamentSelection = new TournamentSelection<>(5, algorithm);
-        FitnessCalculator<Integer, Integer> fitnessCalculator = (genome, solution) -> {
-            int sum = genome.getGenes().stream()
-                    .mapToInt((g) -> (Integer)g)
-                    .sum();
-            int solutionFitness = algorithm.getSolutionFitness();
-            return solutionFitness - Math.abs(solutionFitness - sum);
-        };
-        algorithm.setBestKeepNumber(5);
-        algorithm.setCrossoverRate(0.5);
-        algorithm.setMutationRate(0.05);
-        algorithm.setGenomeSize(5);
-        algorithm.setMaxIterations(10000);
-        algorithm.setPopulationSize(25);
-        algorithm.setSolution(1000);
-        algorithm.setSolutionFitness(1000);
-        algorithm.setFitnessCalculator(fitnessCalculator);
-        algorithm.setRandomizer(randomizer);
-        algorithm.setSelection(tournamentSelection);
-
-        algorithm.run();
-        algorithm.stopThreadPool();
-
-        Genome<Integer> genome = algorithm.getFinalGenome();
-        int sum = 0;
-        for(Integer number : genome.getGenes())
-        {
-            System.out.println(number);
-            sum += number;
-        }
-        System.out.println("sum: " + sum);
-    }
-
-    public static void main(String[] args)
-    {
+        System.out.print("\033[H\033[2J");
+        System.out.flush();
         geneticCreatureProcess(args);
-        //string();
-        //number();
     }
 }

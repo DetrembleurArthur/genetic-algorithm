@@ -1,12 +1,17 @@
 package com.arthur.hepl.generic;
 
+import com.arthur.hepl.perf.Recorder;
 import lombok.SneakyThrows;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.Scanner;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 /**
@@ -27,21 +32,56 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     private Selection<T> selection;
     private double crossoverRate;
     private double mutationRate;
+    private boolean manuallyControlled = false;
+    private final Scanner userInput = new Scanner(System.in);
+    private StatusRunner<T> statusRunner;
     private StopGeneticCriteria<R> stopGeneticCriteria = new StopGeneticCriteria.StrictStopGeneticCriteria<>();
-    private final Comparator<FitnessCache<T, R>> fitnessComparator = Comparator.comparing(o -> {
+    private GeneticResult<T, R> geneticResult;
+    private Recorder recorder;
+
+    private final Comparator<FitnessCache<T, R>> fitnessComparator = (o1, o2) -> {
         try
         {
-            return o.getFitnessFuture().get();
+            return o2.getFitnessFuture().get().compareTo(o1.getFitnessFuture().get());
         } catch (InterruptedException | ExecutionException e)
         {
-            return null;
+            e.printStackTrace();
         }
-    });
-    private Genome<T> finalGenome;
+        return 0;
+    };
 
     private ArrayList<FitnessCache<T, R>> fitnessCache = new ArrayList<>();
     private ArrayList<FitnessCache<T, R>> fitnessCacheBackup = new ArrayList<>();
-    private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);
+    private ThreadPoolExecutor executor;
+
+    private int userControl(int iteration, FitnessCache<T, R> bestFitness) throws ExecutionException, InterruptedException
+    {
+        while (true)
+        {
+            System.out.println("iteration: " + iteration);
+            System.out.println("Enter a command then press ENTER");
+            System.out.print("> ");
+            String command = userInput.nextLine();
+            String[] tokens = command.split(" ");
+            if (tokens.length >= 1)
+            {
+                switch (tokens[0])
+                {
+                    case "n":
+                        if (tokens.length >= 2)
+                        {
+                            return Integer.parseInt(tokens[1]);
+                        }
+                        return 1;
+
+                    case "s":
+                        System.out.println("Best fitness: " + bestFitness.getFitnessFuture().get());
+                        if (statusRunner != null)
+                            statusRunner.run(bestFitness.getGenome().clone());
+                }
+            }
+        }
+    }
 
     public void stopThreadPool()
     {
@@ -50,7 +90,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
 
     private void computeFitness(Population<T> population)
     {
-        for(Genome<T> genome : population.getGenomes())
+        for (Genome<T> genome : population.getGenomes())
         {
             Future<R> fitnessFuture = executor.submit(() -> fitnessCalculator.calculateFitness(genome, solution));
             FitnessCache<T, R> cache = new FitnessCache<>(genome, fitnessFuture);
@@ -62,25 +102,45 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     @Override
     public void run()
     {
+        System.out.println("En cours...");
+        geneticResult = null;
+        fitnessCache.clear();
+        fitnessCacheBackup.clear();
         Instant start = Instant.now();
         Population<T> population = new Population<>();
         population.randomize(populationSize, genomeSize, randomizer);
         computeFitness(population);
-        R fittest = null;
+        FitnessCache<T, R> bestFitness = null;
         int iteration = 0;
-        while(iteration < maxIterations && !stopGeneticCriteria.mustBeStopped(fittest = getFittest().getFitnessFuture().get(), solutionFitness))
+        int stepIterations = 0;
+        while (iteration < maxIterations && !stopGeneticCriteria.mustBeStopped((bestFitness = getFittest()).getFitnessFuture().get(), solutionFitness))
         {
+            if (recorder != null)
+            {
+                recordIteration(iteration, false);
+            }
+            if (manuallyControlled)
+            {
+                if (iteration >= stepIterations)
+                    stepIterations += userControl(iteration, bestFitness);
+            }
             evolve();
             iteration++;
         }
         Instant end = Instant.now();
         System.out.println("Iterations: " + iteration);
-        System.out.println("Fittest: " + fittest);
-        System.out.println("Time: " + (end.toEpochMilli() - start.toEpochMilli()) + "ms");
-        finalGenome = getFittest().getGenome();
+        assert bestFitness != null;
+        System.out.println("Fittest: " + bestFitness.getFitnessFuture().get());
+        var time = end.toEpochMilli() - start.toEpochMilli();
+        System.out.println("Time: " + time + "ms");
+        geneticResult = new GeneticResult<>(bestFitness.getFitnessFuture().get(), bestFitness.getGenome(), iteration, (int) time);
+        if (recorder != null)
+        {
+            recordIteration(iteration, true);
+        }
     }
-    
-    public void evolve()
+
+    public void evolve() throws ExecutionException, InterruptedException
     {
         Population<T> temp = new Population<>();
         List<FitnessCache<T, R>> sorted = fitnessCache
@@ -111,11 +171,11 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         int genomeSize = parent1.getGenes().size();
         ArrayList<T> genesParent1 = parent1.getGenes();
         ArrayList<T> genesParent2 = parent2.getGenes();
-        for(int i = 0; i < genomeSize; i++)
+        for (int i = 0; i < genomeSize; i++)
         {
             child.getGenes()
-                .add(Math.random() <= crossoverRate ?
-                    genesParent1.get(i) : genesParent2.get(i));
+                    .add(Math.random() <= crossoverRate ?
+                            genesParent1.get(i) : genesParent2.get(i));
         }
         return child;
     }
@@ -123,111 +183,142 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     private void mutate(Genome<T> genome)
     {
         int genomeSize = genome.getGenes().size();
-        for(int i = 0; i < genomeSize; i++)
+        for (int i = 0; i < genomeSize; i++)
         {
-            if(Math.random() <= mutationRate)
+            if (Math.random() <= mutationRate)
             {
                 genome.getGenes().set(i, randomizer.randomize());
             }
         }
     }
 
+    @SneakyThrows
+    private void recordIteration(int iteration, boolean save)
+    {
+        int i = 1;
+        for (FitnessCache<T, R> cache : fitnessCache)
+        {
+            recorder.addRow(String.valueOf(iteration + 1), String.valueOf(i), cache.getFitnessFuture().get().toString());
+            i++;
+        }
+        if (save)
+            recorder.write();
+    }
+
     public FitnessCache<T, R> getFittest()
     {
         return fitnessCache.stream()
-                .max(fitnessComparator).orElse(null);
+                .min(fitnessComparator).orElse(null);
     }
 
-    public int getPopulationSize() {
+    public int getPopulationSize()
+    {
         return populationSize;
     }
 
-    public void setPopulationSize(int populationSize) {
+    public void setPopulationSize(int populationSize)
+    {
         this.populationSize = populationSize;
     }
 
-    public int getGenomeSize() {
+    public int getGenomeSize()
+    {
         return genomeSize;
     }
 
-    public void setGenomeSize(int genomeSize) {
+    public void setGenomeSize(int genomeSize)
+    {
         this.genomeSize = genomeSize;
     }
 
-    public GeneRandomizer<T> getRandomizer() {
+    public GeneRandomizer<T> getRandomizer()
+    {
         return randomizer;
     }
 
-    public void setRandomizer(GeneRandomizer<T> randomizer) {
+    public void setRandomizer(GeneRandomizer<T> randomizer)
+    {
         this.randomizer = randomizer;
     }
 
-    public int getMaxIterations() {
+    public int getMaxIterations()
+    {
         return maxIterations;
     }
 
-    public void setMaxIterations(int maxIterations) {
+    public void setMaxIterations(int maxIterations)
+    {
         this.maxIterations = maxIterations;
     }
 
-    public FitnessCalculator<R, S> getFitnessCalculator() {
+    public FitnessCalculator<R, S> getFitnessCalculator()
+    {
         return fitnessCalculator;
     }
 
-    public void setFitnessCalculator(FitnessCalculator<R, S> fitnessCalculator) {
+    public void setFitnessCalculator(FitnessCalculator<R, S> fitnessCalculator)
+    {
         this.fitnessCalculator = fitnessCalculator;
     }
 
-    public S getSolution() {
+    public S getSolution()
+    {
         return solution;
     }
 
-    public void setSolution(S solution) {
+    public void setSolution(S solution)
+    {
         this.solution = solution;
     }
 
-    public R getSolutionFitness() {
+    public R getSolutionFitness()
+    {
         return solutionFitness;
     }
 
-    public void setSolutionFitness(R solutionFitness) {
+    public void setSolutionFitness(R solutionFitness)
+    {
         this.solutionFitness = solutionFitness;
     }
 
-    public int getBestKeepNumber() {
+    public int getBestKeepNumber()
+    {
         return bestKeepNumber;
     }
 
-    public void setBestKeepNumber(int bestKeepNumber) {
+    public void setBestKeepNumber(int bestKeepNumber)
+    {
         this.bestKeepNumber = bestKeepNumber;
     }
 
-    public Selection<T> getSelection() {
+    public Selection<T> getSelection()
+    {
         return selection;
     }
 
-    public void setSelection(Selection<T> selection) {
+    public void setSelection(Selection<T> selection)
+    {
         this.selection = selection;
     }
 
-    public double getCrossoverRate() {
+    public double getCrossoverRate()
+    {
         return crossoverRate;
     }
 
-    public void setCrossoverRate(double crossoverRate) {
+    public void setCrossoverRate(double crossoverRate)
+    {
         this.crossoverRate = crossoverRate;
     }
 
-    public double getMutationRate() {
+    public double getMutationRate()
+    {
         return mutationRate;
     }
 
-    public void setMutationRate(double mutationRate) {
+    public void setMutationRate(double mutationRate)
+    {
         this.mutationRate = mutationRate;
-    }
-
-    public Genome<T> getFinalGenome() {
-        return finalGenome;
     }
 
     public StopGeneticCriteria<R> getStopGeneticCriteria()
@@ -258,5 +349,49 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     public ThreadPoolExecutor getExecutor()
     {
         return executor;
+    }
+
+    public boolean isManuallyControlled()
+    {
+        return manuallyControlled;
+    }
+
+    public void setManuallyControlled(boolean manuallyControlled)
+    {
+        this.manuallyControlled = manuallyControlled;
+    }
+
+    public StatusRunner<T> getStatusRunner()
+    {
+        return statusRunner;
+    }
+
+    public void setStatusRunner(StatusRunner<T> statusRunner)
+    {
+        this.statusRunner = statusRunner;
+    }
+
+    public GeneticResult<T, R> getGeneticResult()
+    {
+        return geneticResult;
+    }
+
+    public Recorder getRecorder()
+    {
+        return recorder;
+    }
+
+    public void setRecorder(Recorder recorder)
+    {
+        this.recorder = recorder;
+        recorder.setColumns("iterations", "genome", "fitness");
+    }
+
+    public void initThreadPool(int size)
+    {
+        if (executor == null)
+            executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(size);
+        else
+            executor.setCorePoolSize(size);
     }
 }

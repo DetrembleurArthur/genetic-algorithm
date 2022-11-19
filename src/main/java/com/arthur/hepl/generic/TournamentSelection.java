@@ -1,7 +1,6 @@
 package com.arthur.hepl.generic;
 
 import java.util.Comparator;
-import java.util.concurrent.ExecutionException;
 
 public class TournamentSelection<T, R extends Comparable<R>> implements Selection<T>
 {
@@ -19,9 +18,11 @@ public class TournamentSelection<T, R extends Comparable<R>> implements Selectio
     {
         FitnessCache<T, R> fitnessCache = algorithm.getFitnessCache()
                 .stream()
+                //sert à randomiser le stream
                 .sorted(Comparator.comparingDouble(o -> Math.random()))
                 .limit(tournamentSize)
-                .max(algorithm.getFitnessComparator()).orElse(null);
+                //min car le fitness comparator sert à trier dans l'ordre décroissant!
+                .min(algorithm.getFitnessComparator()).orElse(null);
         assert fitnessCache != null;
         return fitnessCache.getGenome();
     }
