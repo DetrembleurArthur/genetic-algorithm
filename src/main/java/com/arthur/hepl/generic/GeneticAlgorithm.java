@@ -39,6 +39,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
     private GeneticResult<T, R> geneticResult;
     private Recorder recorder;
 
+    //permet de comparer les fitness de manière à pouvoir les classer de manière croissante
     private final Comparator<FitnessCache<T, R>> fitnessComparator = (o1, o2) -> {
         try
         {
@@ -140,7 +141,7 @@ public class GeneticAlgorithm<T, R extends Comparable<R>, S> implements Runnable
         }
     }
 
-    public void evolve() throws ExecutionException, InterruptedException
+    public void evolve()
     {
         Population<T> temp = new Population<>();
         List<FitnessCache<T, R>> sorted = fitnessCache

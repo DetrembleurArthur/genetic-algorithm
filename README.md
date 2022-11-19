@@ -92,6 +92,8 @@ solution.fitness=3.236111
 #le nombre de threads lancés dans le pool executor
 thread.pool.size=4
 #bloque le programme à chaque itération si activé (l'utilisateur peut ainsi vérifier le status de l'algorithme et lancer n itérations à la fois)
+# l'utilisateur écrit "n <nombre de génération>" pour lancer un certain nombre de génération
+# l'utilisateur écrit "s" pour voir la meilleure fitness de l'algorithme et pour animer la meilleure créature
 manually.controlled=false
 #le temps entre chaque mouvement de créature
 env.anim.time=500
@@ -299,6 +301,22 @@ public synchronized byte getCase(Vector2i position)
 
 
 
+## Calcul des fitness
+
+La fitness de chaque créature est calculée selon la formule suivante:
+
+Avec D étant la distance entre la créature et l'arrivée
+
+Avec M étant le nombre de mouvements utilisés par la créature
+
+Avec T étant le nombre de ticks utilisés par la créature
+
+```
+fitness = D * 3 + (M + T)
+```
+
+D a un poids plus fort que les deux autres paramètre étant donnée qu'il représente le critère le plus important à satisfaire pour la créature.
+
 ## Performance
 
 Après avoir exécuté 100x l'algorithme génétique pour un environnement donné de taille (12, 6), le temps moyen d'exécution est de:
@@ -321,9 +339,63 @@ Cette dernière devient alors mon critère d'arrêt.
 
 
 
+## Détails supplémentaires
+
+Au début d'une itération,lorsque l'on récolte les X meilleurs génomes de la population, je procède comme suit:
+
+```java
+List<FitnessCache<T, R>> sorted = fitnessCache
+                .stream()
+                .sorted(fitnessComparator)
+                .limit(bestKeepNumber)
+                .collect(Collectors.toList());
+```
+
+Je trie la population de manière décroissante via le fitnessComparator (c'est pourquoi ce dernier compare de manière inversée):
+
+```java
+private final Comparator<FitnessCache<T, R>> fitnessComparator = (o1, o2) -> {
+        try
+        {
+            return o2.getFitnessFuture().get().compareTo(o1.getFitnessFuture().get());
+        } catch (InterruptedException | ExecutionException e)
+        {
+            e.printStackTrace();
+        }
+        return 0;
+};
+```
+
+Le "limit" me permettant de ne conserver que les fitness les plus grandes.
+
+Le fait que le comparateur compare à l'envers, implique que lorsque l'on souhaite récupérer le génome le plus grand en terme de fitness, il faut chercher le minimum de la population:
+
+```java
+public FitnessCache<T, R> getFittest()
+{
+	return fitnessCache.stream()
+		.min(fitnessComparator) => car le fitnessComparator est inversé
+		.orElse(null);
+}
+```
+
+Il en est de même dans la classe TournamentSelection
 
 
 
+Lors de l'animation d'une créature sur la grille, chaque mouvement est affiché et peut être considéré comme environnemental ou non.
+
+Les mouvements environnementaux concernent les mouvements dus à la gravité.
+
+Lors de l'affichage des mouvement, un mouvement peut aussi être affiché sous deux dimensions (real et origin)
+
+real: mouvement que la créature applique avec succès.
+
+origin: mouvement que la créature a voulu appliqué mais qui n'est pas possible.
+
+Par exemple, si une créature veut aller vers la droite mais qu'un mûr si trouve,
+
+le mouvement "real" sera BLOCKED (la créature n'a pas pu bouger), mais le mouvement "origin" sera RIGHT.
 
 
 
@@ -408,36 +480,4 @@ for(Integer number : genome.getGenes())
     sum += number;
 }
 System.out.println("sum: " + sum);Random random = new Random();
-GeneticAlgorithm<Integer, Integer, Integer> algorithm = new GeneticAlgorithm<>();
-GeneRandomizer<Integer> randomizer = () -> random.nextInt(10000);
-TournamentSelection<Integer> tournamentSelection = new TournamentSelection<>(5, algorithm);
-FitnessCalculator<Integer, Integer> fitnessCalculator = (genome, solution) -> {
-    int sum = genome.getGenes().stream()
-        .mapToInt((g) -> (Integer)g)
-        .sum();
-    int solutionFitness = algorithm.getSolutionFitness();
-    return solutionFitness - Math.abs(solutionFitness - sum);
-};
-algorithm.setBestKeepNumber(5);
-algorithm.setCrossoverRate(0.5);
-algorithm.setMutationRate(0.05);
-algorithm.setGenomeSize(5);
-algorithm.setMaxIterations(10000);
-algorithm.setPopulationSize(25);
-algorithm.setSolution(1000);
-algorithm.setSolutionFitness(1000);
-algorithm.setFitnessCalculator(fitnessCalculator);
-algorithm.setRandomizer(randomizer);
-algorithm.setSelection(tournamentSelection);
-
-algorithm.run();
-
-Genome<Integer> genome = algorithm.getFinalGenome();
-int sum = 0;
-for(Integer number : genome.getGenes())
-{
-    System.out.println(number);
-    sum += number;
-}
-System.out.println("sum: " + sum);
 ```
