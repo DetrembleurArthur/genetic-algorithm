@@ -317,7 +317,7 @@ fitness = D * 3 + (M + T)
 
 D a un poids plus fort que les deux autres paramètre étant donnée qu'il représente le critère le plus important à satisfaire pour la créature.
 
-## Performance
+## Performances
 
 Après avoir exécuté 100x l'algorithme génétique pour un environnement donné de taille (12, 6), le temps moyen d'exécution est de:
 
@@ -340,6 +340,10 @@ Cette dernière devient alors mon critère d'arrêt.
 Par exemple si on visualise les fitness du génome n°1 de la population au cours des itérations, on remarque qu'elles s'arrêtent à un maximum:
 
 ![Capture d’écran 2022-11-19 190249](https://user-images.githubusercontent.com/35709388/202865113-86d61fc6-0fad-4e4b-b254-973a1f894718.png)
+
+Graphe donné par le script R donné à la racine du projet.
+
+
 
 
 ## Détails supplémentaires
