@@ -10,6 +10,7 @@ import org.joml.Vector2i;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Properties;
 
 //slide 22 du lab 2 (environnement
@@ -17,10 +18,10 @@ public class Main
 {
     private static void simpleCreatureAnimation(String[] args)
     {
-        Creature creature = new Creature();
-        Environnement env = Environnement.buildFromArgs(args, creature);
+        Creature creature = args.length == 5 ? Creature.fromMoveString(args[4]) : new Creature();
+        Environnement env = Environnement.buildFromArgs(args);
         assert env != null;
-        env.animate(creature, 500);
+        env.animate(creature, 500, false);
     }
 
     public enum GameProp
@@ -52,7 +53,6 @@ public class Main
         final Properties properties = new Properties();
         File file = new File(filename);
         properties.load(new FileReader(filename));
-        System.out.println(properties);
         return properties;
     }
 
@@ -66,9 +66,8 @@ public class Main
             GeneRandomizer<Movements> randomizer = Movements::random;
             TournamentSelection<Movements, Double> tournamentSelection = new TournamentSelection<>(Integer.parseInt((String) properties.getOrDefault(GameProp.TOURNAMENT_SIZE.name, "5")), algorithm);
             FitnessCalculator<Double, Vector2i> fitnessCalculator = (genome, solution) -> {
-                Creature creature = new Creature();
-                genome.getGenes().forEach(move -> creature.addMovement((Movements) move));
-                EnvCalculationResult result = env.calculateFinalPosition(creature, null);
+                Creature creature = new Creature((ArrayList<Movements>) genome.getGenes());
+                EnvCalculationResult result = env.calculateFinalPositionWithMap(creature, null);
                 double distScore = 1.0 / (result.getDistanceWithEndPosition() + 1.0);
                 double movesUsedScore = 1.0 / (result.getMovesUsed() + 1.0);
                 double ticksScore = 1.0 / result.getTickCount();
@@ -91,9 +90,8 @@ public class Main
             algorithm.setManuallyControlled(Boolean.parseBoolean((String) properties.getOrDefault(GameProp.MANUALLY_CONTROLLED.name, "false")));
             int envAnimTimeMs = Integer.parseInt((String) properties.getOrDefault(GameProp.ENV_ANIM_TIME.name, "1000"));
             algorithm.setStatusRunner(genome -> {
-                Creature creature = new Creature();
-                genome.getGenes().forEach(creature::addMovement);
-                env.animate(creature, envAnimTimeMs);
+                Creature creature = new Creature(genome.getGenes());
+                env.animate(creature, envAnimTimeMs, false);
             });
 
             if (Boolean.parseBoolean((String) properties.getOrDefault(GameProp.RECORD_POPULATION.name, "false")))
@@ -101,27 +99,15 @@ public class Main
                 algorithm.setRecorder(new Recorder((String) properties.getOrDefault(GameProp.RECORD_FILE.name, "population.csv")));
             }
 
-            double sum = 0;
-            double sumi = 0;
-            for(int i = 0; i < 100; i++)
-            {
-                System.out.println(i + 1);
-                algorithm.run();
-                sum += algorithm.getGeneticResult().getTimeMs();
-                sumi += algorithm.getGeneticResult().getIterations();
-            }
-            System.out.println(sum / 100);
-            System.out.println(sumi / 100);
-
+            algorithm.run();
             algorithm.stopThreadPool();
 
             var result = algorithm.getGeneticResult();
             Genome<Movements> genome = result.getGenome();
 
 
-            Creature creature = new Creature();
-            genome.getGenes().forEach(creature::addMovement);
-            env.animate(creature, envAnimTimeMs);
+            Creature creature = new Creature(genome.getGenes());
+            env.animate(creature, envAnimTimeMs, false);
 
             System.out.println("Mouvements:");
             for (Movements move : genome.getGenes())

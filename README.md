@@ -73,7 +73,9 @@ Pour déployer l'application: `mvn clean package`
 Pour exécuter ce .jar : `cd target`
 `java -jar .\genetic-1.0-SNAPSHOT-jar-with-dependencies.jar 12 6 ..\env-x-y.txt 100 COORD_Y_TO_DOWN`
 
-Attention, le programme requiert un fichier genetic_game.properties.
+**Attention, le programme requiert un fichier genetic_game.properties.**
+
+Un de ces fichier se trouve à la racine du dépôt git.
 
 Ce dernier doit se trouver au même endroit que le JAR.
 
@@ -115,6 +117,8 @@ Lorsque x est décrémenté, la créature se dirige vers la gauche
 Lorsque y est incrémenté, la créature se dirige vers le bas
 
 Lorsque y est décrémenté, la créature se dirige vers le haut
+
+
 
 ## Généricité de l'algorithme génétique
 
@@ -299,6 +303,15 @@ public synchronized byte getCase(Vector2i position)
 }
 ```
 
++ Lors de l'accès à la movements map
+
+```java
+synchronized (this)
+{
+    item = moveMap.get(move)[finalPosition.y][finalPosition.x];
+}
+```
+
 
 
 ## Calcul des fitness
@@ -317,11 +330,118 @@ fitness = D * 3 + (M + T)
 
 D a un poids plus fort que les deux autres paramètre étant donnée qu'il représente le critère le plus important à satisfaire pour la créature.
 
+Ces trois données sont le fruit des méthodes "calculateFinalPosition" et "calculateFinalPositionWithMap" de ma classe Environnement.
+
+La première des deux méthodes calcule la position finale de la créature en fonction de ses mouvements et calcule également le nombre de mouvements utilisés et le nombre de ticks consommés. Le point négatif de cette méthode est qu'elle calcule la position finale de la créature en faisant les vérifications suivante:
+
++ La créature est elle dans un mur?
++ La créature est elle dans les airs?
++ La créature doit elle être impactée par la gravité?
++ La créature doit-elle continuer à tomber?
+
+Cet algorithme itère pour chaque mouvement de la créature, et chacune de ces itérations contient d'autres itération pour faire appliquer la gravité à la créature. Il y a pas mal de calculs à effectuer...
+
+J'ai donc mis en place un autre moyen moins gourmand en calcul mais très gourmand en terme de mémoire utilisée.
+
+La deuxième méthode "calculateFinalPositionWithMap" a le même but que la précédente mais ne s'embête pas à calculer la position finale d'une créature. De plus elle ne doit pas non plus calculer la gravité appliquée à cette position.
+
+En effet, tous ces calculs sont effectués juste après le chargement du niveau par la classe. La grille du niveau va se voir accompagnée de ce que j'appelle des "Movements Maps". Ces dernières sont au nombre de 8 et sont l'image de la grille d'origine mais à la place d'avoir un type de case à chaque élément de la grille, les maps possèdent des objets décrivant la position de la créature si elle appliquer un certain mouvement.
+
+Prenons un exemple:
+
+Considérons la grille d'origine suivante:
+
+```java
+En mémoire:
+0 0 0 0 0 0 0 0 0 0 0 0 
+0 0 0 0 0 0 0 0 0 0 0 0 
+0 0 0 0 0 1 1 1 1 1 2 1 
+1 3 1 0 1 1 1 1 1 1 1 1 
+1 1 1 1 1 1 1 1 1 1 1 1 
+1 1 1 1 1 1 1 1 1 1 1 1
+En console:
+# # # # # # # # # # # #
+#                   A #
+#                   # #
+#             #   # # #
+# D C #     # #   # # #
+# # # # # # # # # # # #
+```
+
+Cette dernière va être accompagnée de 8 Movements Map, chacune correspondant à un mouvement donnée.
+
+Voici par exemple celle correspondant au mouvement UP_RIGHT:
+
+```
+0:0:1| 1:0:1| 2:0:1| 3:0:1| 4:0:1| 5:0:1| 6:0:1| 7:0:1| 8:0:1| 9:0:1| 10:0:1| 11:0:1| 
+0:1:1| 1:1:1| 2:1:1| 3:1:1| 4:1:1| 5:1:1| 6:1:1| 7:1:1| 8:1:1| 9:1:1| 10:1:1| 11:1:1| 
+0:2:1| 1:2:1| 2:2:1| 3:2:1| 4:2:1| 5:2:1| 6:2:1| 9:2:2| 8:2:1| 10:1:1| 10:2:1| 11:2:1| 
+0:3:1| 1:3:1| 2:3:1| 5:4:3| 4:3:1| 5:3:1| 7:2:1| 7:3:1| 8:3:1| 9:3:1| 10:3:1| 11:3:1| 
+0:4:1| 2:4:2| 3:3:1| 3:4:1| 5:4:2| 6:3:1| 6:4:1| 7:4:1| 8:4:1| 9:4:1| 10:4:1| 11:4:1| 
+0:5:1| 1:5:1| 2:5:1| 3:5:1| 4:5:1| 5:5:1| 6:5:1| 7:5:1| 8:5:1| 9:5:1| 10:5:1| 11:5:1| 
+```
+
+Chaque case est à associer à la case de mêmes coordonnées de la grille d'origine.
+
+Chaque élémént est caractérisé par 3 numéros:
+
++ Les deux premiers correspondent à la position que doit avoir la créature après avoir effectué un mouvement UP_RIGHT sur la case en question
+
+  Si je prends l'élément à la position (7, 2) [y croissant vers le bas], on obtient "9:2:2" sur la Movements Map UP_RIGHT.
+
+  Ce qui veut dire que si une créature à la position (7, 2) effectue un mouvement UP_RIGHT, cette dernière devra se placer à la position (9, 2). Le calcul de la gravité est pris en compte. Dans ce cas si, lorsque la créature effectue un UP_RIGHT, cette dernière saute vers la droite et retombe deux cases plus loin. La Movements Map contient directement cette coordonnées ce qui évite de la recalculer dans la méthode "calculateFinalPositionWithMap".
+
++ Le troisième chiffre représente le nombre de ticks utilisés par le mouvement de la créature
+
+  Dans le cas de l'exemple précédent, le nombre vaut 2. Cela prend en compte le mouvement UP_RIGHT et la retombée due à la gravité.
+
+Il existe une troisième donnée dans les éléments d'une map. Elle représente la décomposition de chaque ticks en mouvements (même les mouvements dus à la gravité).
+
+Cette liste est utilisée pour l'affichage de la créature et également pour annuler les derniers mouvements de la créatures dans le cas où le nombre de ticks serait dépassé.
+
+Si la créature est initialement à 5 ticks, que la limite est à 6 et que le prochain mouvement fait 2 ticks; alors la créature va se voir annuler le mouvement du dernier tick, qui est probablement un mouvement du à la gravité.
+
+Le point négatif de cette technique est qu'elle nécessite d'utiliser pas mal de mémoire par rapport à la méthode précédente. Mais le calcul des fitness est plus court.
+
+
+
 ## Performances
 
-Après avoir exécuté 100x l'algorithme génétique pour un environnement donné de taille (12, 6), le temps moyen d'exécution est de:
+Après avoir exécuté 300000 fois l'algorithme de calcul de fitness par Map et Sans Map (600000 fois en tout), le temps moyen d'exécution est de:
 
-714ms pour 2928 itérations en moyenne.
+0.0013 nano secondes pour l'algorithme utilisant les Maps (~400 ns pour 300000 itérations)
+
+0.0023 nano secondes pour l'algorithme utilisant les Maps (~700 ns pour 300000 itérations)
+
+L'algorithme avec les Maps est presque deux fois plus rapide!
+
+Code situé dans le Main du fichier Environnement.java:
+
+```java
+double time1 = 0;
+double time2 = 0;
+long s;
+for(int i = 0; i < 300000; i++)
+{
+    s = System.nanoTime();
+    environnement.calculateFinalPositionWithMap(creature, null);
+    time1 = System.nanoTime() - s;
+    s = System.nanoTime();
+    environnement.calculateFinalPosition(creature, null);
+    time2 = System.nanoTime() - s;
+    System.out.println(i + " " + time1 + " " + time2);
+}
+System.out.println(time1 / 300000 + " " + time1);
+System.out.println(time2 / 300000 + " " + time2);
+```
+
+Après avoir exécuté 100x l'algorithme génétique complet (avec et sans Map) pour un environnement donné de taille (12, 6), le temps moyen d'exécution est de:
+
+72. 4 ms pour 266 itérations en moyenne (0.272 ms par itération en moyenne). (algorithme utilisant les movements maps)
+
+77.2 ms pour 270 itérations en moyenne (0.286 ms par itération en moyenne). (algorithme n'utilisant pas les movements maps)
+
+L'algorithme utilisant les Maps est légèrement plus rapide.
 
 4 threads étaient actifs dans le pool executor.
 

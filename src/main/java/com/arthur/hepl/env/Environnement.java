@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Scanner;
@@ -38,6 +39,7 @@ public class Environnement
     private final Vector2i startPosition = new Vector2i();
     private final Vector2i endPosition = new Vector2i();
     private final int maxTickCount;
+    private HashMap<Movements, MoveMapItem[][]> moveMap;
 
     public Environnement(int width, int height, int maxTickCount)
     {
@@ -47,16 +49,6 @@ public class Environnement
         grid = new byte[height][width];
     }
 
-    public static Environnement buildFromArgs(String[] args, Creature creature)
-    {
-        if (args.length == 5)
-        {
-            Environnement env = buildFromArgs(args);
-            creature.createMovementsFromString(args[4]);
-            return env;
-        }
-        return null;
-    }
 
     public static Environnement buildFromArgs(String[] args)
     {
@@ -73,13 +65,59 @@ public class Environnement
             if (filename.equals("random"))
                 env.generateRandomGrid(fileType);
             else
-                env.load_env(filename, fileType);
+                env.loadEnv(filename, fileType);
+            env.computeMoveMap();
             return env;
         }
         return null;
     }
 
-    public void load_env(String filename, EnvFileType fileType)
+    private void loadTileFile(Scanner scanner)
+    {
+        int i = 0;
+        while (scanner.hasNextInt())
+        {
+            int value = scanner.nextInt();
+            int l = i / grid[0].length;
+            int c = i - grid[0].length * (i / grid[0].length);
+            grid[l][c] = (byte) value;
+            if (value == Cases.START)
+            {
+                startPosition.set(c, l);
+            } else if (value == Cases.END)
+            {
+                endPosition.set(c, l);
+            }
+            i++;
+        }
+    }
+
+    private void loadCoordFile(Scanner scanner, EnvFileType fileType)
+    {
+        int i = 0;
+        while (scanner.hasNextLine())
+        {
+            String[] line = scanner.nextLine().split(" ");
+            int x = Integer.parseInt(line[0]);
+            int y = Integer.parseInt(line[1]);
+            if (fileType.equals(EnvFileType.COORD_Y_TO_UP))
+                y = height - y - 1;
+            byte value = Cases.WALL;
+            if (i == 0)
+            {
+                value = Cases.START;
+                startPosition.set(x, y);
+            } else if (i == 1)
+            {
+                value = Cases.END;
+                endPosition.set(x, y);
+            }
+            grid[y][x] = value;
+            i++;
+        }
+    }
+
+    public void loadEnv(String filename, EnvFileType fileType)
     {
         File file = new File(filename);
         if (file.exists())
@@ -89,45 +127,10 @@ public class Environnement
                 Scanner scanner = new Scanner(new FileInputStream(file));
                 if (fileType.equals(EnvFileType.TILES))
                 {
-                    int i = 0;
-                    while (scanner.hasNextInt())
-                    {
-                        int value = scanner.nextInt();
-                        int l = i / grid[0].length;
-                        int c = i - grid[0].length * (i / grid[0].length);
-                        grid[l][c] = (byte) value;
-                        if (value == Cases.START)
-                        {
-                            startPosition.set(c, l);
-                        } else if (value == Cases.END)
-                        {
-                            endPosition.set(c, l);
-                        }
-                        i++;
-                    }
+                    loadTileFile(scanner);
                 } else
                 {
-                    int i = 0;
-                    while (scanner.hasNextLine())
-                    {
-                        String[] line = scanner.nextLine().split(" ");
-                        int x = Integer.parseInt(line[0]);
-                        int y = Integer.parseInt(line[1]);
-                        if (fileType.equals(EnvFileType.COORD_Y_TO_UP))
-                            y = height - y - 1;
-                        byte value = Cases.WALL;
-                        if (i == 0)
-                        {
-                            value = Cases.START;
-                            startPosition.set(x, y);
-                        } else if (i == 1)
-                        {
-                            value = Cases.END;
-                            endPosition.set(x, y);
-                        }
-                        grid[y][x] = value;
-                        i++;
-                    }
+                    loadCoordFile(scanner, fileType);
                 }
 
             } catch (FileNotFoundException e)
@@ -137,7 +140,7 @@ public class Environnement
         }
     }
 
-    //à optimiser
+    //à améliorer...
     @SneakyThrows
     public void generateRandomGrid(EnvFileType fileType)
     {
@@ -178,9 +181,9 @@ public class Environnement
         }
         File file = new File("random-env.txt");
         FileWriter writer = new FileWriter(file);
-        for(int i = 0; i < height; i++)
+        for (int i = 0; i < height; i++)
         {
-            for(int j = 0; j < width; j++)
+            for (int j = 0; j < width; j++)
             {
                 writer.write(grid[i][j] + " ");
             }
@@ -211,6 +214,38 @@ public class Environnement
     {
         int gridCase = getCase(position);
         return gridCase == Cases.WALL || gridCase == Cases.OOB;
+    }
+
+    public void computeMoveMap()
+    {
+        moveMap = new HashMap<>();
+        for (Movements move : Movements.values())
+        {
+            if (move.equals(Movements.BLOCKED))
+                continue;
+            MoveMapItem[][] items = new MoveMapItem[height][width];
+            moveMap.put(move, items);
+            //System.out.println("MAP: " + move);
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    Vector2i destination = new Vector2i(x, y);
+                    int ticksUsed = 1;
+                    ArrayList<Move> movementsChain = new ArrayList<>();
+                    if (grid[y][x] == Cases.AIR || grid[y][x] == Cases.START)
+                    {
+                        if (inWall(new Vector2i(x, y + 1)))
+                        {
+                            ticksUsed += move(destination, move, movementsChain, 0) - 1;
+                        }
+                    }
+                    items[y][x] = new MoveMapItem(destination, ticksUsed, movementsChain);
+                    //System.out.print(destination.x + ":" + destination.y + ":" + ticksUsed + "| ");
+                }
+                //System.out.println();
+            }
+        }
     }
 
     public int move(Vector2i position, Movements movement, ArrayList<Move> movementsChain, int currentTick)
@@ -249,8 +284,56 @@ public class Environnement
         return getCase(position) == Cases.END;
     }
 
+
+    public EnvCalculationResult calculateFinalPositionWithMap(Creature creature, ArrayList<Move> movementsChain)
+    {
+        boolean internalMc = movementsChain == null;
+        if (internalMc)
+            movementsChain = new ArrayList<>();
+        creature.prepareQueue();
+        Vector2i finalPosition;
+        Vector2i officialEndPosition;
+        int tickCountLimit;
+        synchronized (this)
+        {
+            finalPosition = new Vector2i(startPosition);
+            officialEndPosition = new Vector2i(endPosition);
+            tickCountLimit = maxTickCount;
+        }
+        int i = 0, tickOutBand;
+        Movements move;
+        MoveMapItem item;
+        while (i < tickCountLimit && !arrived(finalPosition) && (move = creature.nextMovement()) != null)
+        {
+            synchronized (this)
+            {
+                item = moveMap.get(move)[finalPosition.y][finalPosition.x];
+            }
+            i += item.getTicksUsed();
+            finalPosition = item.getDestination();
+            if(internalMc)
+                movementsChain = item.getMovementsChainRef();
+            else
+                movementsChain.addAll(item.getMovementsChain());
+        }
+        if (i > tickCountLimit)
+        {
+            tickOutBand = i % tickCountLimit;
+            i -= tickOutBand;
+            System.out.println(tickOutBand + " " + i);
+            for (int j = movementsChain.size() - 1; j >= movementsChain.size() - tickOutBand; j--)
+            {
+                finalPosition.sub(movementsChain.get(j).getReal().getMoveVector());
+            }
+        }
+        double distance = finalPosition.distance(officialEndPosition);
+        return new EnvCalculationResult(finalPosition, distance, i, creature.alreadyUsed());
+    }
+
     public EnvCalculationResult calculateFinalPosition(Creature creature, ArrayList<Move> movementsChain)
     {
+        if (movementsChain == null)
+            movementsChain = new ArrayList<>();
         creature.prepareQueue();
         Vector2i finalPosition;
         Vector2i officialEndPosition;
@@ -262,10 +345,20 @@ public class Environnement
             tickCountLimit = maxTickCount;
         }
         Movements move;
-        int i = 0;
+        int i = 0, tickOutBand;
         while (i < tickCountLimit && !arrived(finalPosition) && (move = creature.nextMovement()) != null)
         {
             i += move(finalPosition, move, movementsChain, i);
+        }
+        if (i > tickCountLimit)
+        {
+            tickOutBand = i % tickCountLimit;
+            i -= tickOutBand;
+            System.out.println(tickOutBand + " " + i);
+            for (int j = movementsChain.size() - 1; j >= movementsChain.size() - tickOutBand; j--)
+            {
+                finalPosition.sub(movementsChain.get(j).getReal().getMoveVector());
+            }
         }
         double distance = finalPosition.distance(officialEndPosition);
         //System.out.println("ticks: " + i + " / " + maxTickCount);
@@ -300,19 +393,22 @@ public class Environnement
         System.out.println("+\033[0m");
     }
 
-    public void animate(Creature creature, int tickMs)
+    public void animate(Creature creature, int tickMs, boolean realtimeComputation)
     {
         ArrayList<Move> movementsChain = new ArrayList<>();
-        EnvCalculationResult result = calculateFinalPosition(creature, movementsChain);
+        EnvCalculationResult result = realtimeComputation ?
+                calculateFinalPosition(creature, movementsChain) :
+                calculateFinalPositionWithMap(creature, movementsChain);
         Vector2i position = new Vector2i(startPosition);
         int tick = 0;
         int i = 0;
-        for (Move move : movementsChain)
+        int len = movementsChain.size();
+        var list = len > maxTickCount ? movementsChain.subList(0, len - (len - maxTickCount)) : movementsChain;
+        for (Move move : list)
         {
             System.out.println("\033[0;0H");
             int j = 0;
-
-            for (Move sub : movementsChain)
+            for (Move sub : list)
             {
                 if (i == j)
                     System.out.print(" -> \033[95m" + sub.getOrigin() + "\033[0m");
@@ -334,7 +430,7 @@ public class Environnement
                 e.printStackTrace();
             }
         }
-        System.out.println(result);
+        System.out.println("\n" + result);
     }
 
     public int getWidth()
@@ -363,11 +459,45 @@ public class Environnement
     }
 
 
+    //test de performances
     public static void main(String[] args)
     {
         Environnement environnement = Environnement.buildFromArgs(new String[]{
                 "12", "6", "env-x-y.txt", "100", "COORD_Y_TO_DOWN"
         });
-        environnement.showGrid(new Vector2i());
+        environnement.computeMoveMap();
+        ArrayList<Movements> movements = new ArrayList<>();
+        movements.add(Movements.RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        movements.add(Movements.UP_RIGHT);
+        Creature creature = new Creature(movements);
+
+        double time1 = 0;
+        double time2 = 0;
+        long s;
+        for(int i = 0; i < 300000; i++)
+        {
+            s = System.nanoTime();
+            environnement.calculateFinalPositionWithMap(creature, null);
+            time1 = System.nanoTime() - s;
+            s = System.nanoTime();
+            environnement.calculateFinalPosition(creature, null);
+            time2 = System.nanoTime() - s;
+            System.out.println(i + " " + time1 + " " + time2);
+        }
+        System.out.println(time1 / 300000 + " " + time1);
+        System.out.println(time2 / 300000 + " " + time2);
+
+
+
+        //environnement.animate(creature, 500, false);
     }
 }

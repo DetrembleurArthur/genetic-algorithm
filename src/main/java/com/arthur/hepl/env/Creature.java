@@ -6,27 +6,27 @@ import java.util.Queue;
 
 public class Creature
 {
-    private final ArrayList<Movements> movements = new ArrayList<>();
+    private final ArrayList<Movements> movements;
     private final Queue<Movements> movementsQueue = new ArrayDeque<>();
+
+    public static Creature fromMoveString(String movementsString)
+    {
+        Creature creature = new Creature();
+        for (char c : movementsString.toCharArray())
+        {
+            creature.movements.add(Movements.values()[Integer.parseInt(String.valueOf(c))]);
+        }
+        return creature;
+    }
+
+    public Creature(ArrayList<Movements> movements)
+    {
+        this.movements = movements;
+    }
 
     public Creature()
     {
-    }
-
-    public void createMovementsFromString(String movementsString)
-    {
-        movements.clear();
-        movementsQueue.clear();
-        for (char c : movementsString.toCharArray())
-        {
-            addMovement(Movements.values()[Integer.parseInt(String.valueOf(c))]);
-        }
-    }
-
-
-    public void addMovement(Movements move)
-    {
-        movements.add(move);
+        this.movements = new ArrayList<>();
     }
 
     public void prepareQueue()
