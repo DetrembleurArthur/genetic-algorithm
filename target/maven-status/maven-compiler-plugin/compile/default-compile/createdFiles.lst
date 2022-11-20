@@ -22,6 +22,7 @@ com\arthur\hepl\generic\Genome.class
 com\arthur\hepl\env\Environnement.class
 com\arthur\hepl\generic\FitnessCache.class
 com\arthur\hepl\generic\FitnessToDouble.class
+com\arthur\hepl\env\MoveMapItem.class
 com\arthur\hepl\generic\StopGeneticCriteria.class
 com\arthur\hepl\generic\FitnessToDouble$IntegerFitnessToDouble.class
 com\arthur\hepl\generic\RouletteSelection.class
